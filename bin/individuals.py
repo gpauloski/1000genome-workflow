@@ -6,6 +6,7 @@ import re
 import time
 import tarfile
 import shutil
+import pandas as pd
 
 
 def compress(output, input_dir):
@@ -17,7 +18,96 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def processing(inputfile, columfile, c, counter, stop, total):
+def processing_2(inputfile, columnfile, c, counter, stop, total):
+    print('= Now processing chromosome: {}'.format(c))
+    tic = time.perf_counter()
+
+    counter = int(counter)
+    ending = min(int(stop), int(total))
+
+    ### step 0
+    unzipped = 'ALL.chr{}.individuals.vcf'.format(c)
+    rawdata = readfile(inputfile)
+
+    ### step 2
+    ## Giving a different directory name (chromosome no-counter) for each individuals job
+    ndir = 'chr{}n-{}'.format(c, counter)
+
+    ### step 3
+    # In the bash version, counter started at 1 but in Python we start at 0. 
+    # counter = max(0, counter - 1)  # The max ensure that we don't do -1 if the user set counter 0 directly
+    print("== Total number of lines: {}".format(total))
+    print("== Processing {} from line {} to {}".format(unzipped, counter, stop))
+
+    # We consider the line from counter to stop and we don't over total, then we remove lines starting with '#'
+    #sed -n "$counter"','"$stop"'p;'"$total"'q' $unzipped | grep -ve "#" > cc
+    regex = re.compile('(?!#)')
+    # print(counter, min(stop, total), data[int(counter):int(min(stop, total))] )
+    data = list(filter(regex.match, rawdata[counter:ending]))
+    data = [x.rstrip('\n') for x in data] # Remove \n from words 
+
+    # chrp_data = {}
+    columndata = readfile(columnfile)[0].rstrip('\n').split('\t')
+
+    start_data = 9  # where the real data start, the first 0|1, 1|1, 1|0 or 0|0
+    # position of the last element (normally equals to len(data[0].split(' '))
+    #end_data = 2504
+    end_data = len(columndata) - start_data
+
+    df = pd.DataFrame(columns=['name', 'chrom', 'data']) 
+
+    print("== Number of columns {}".format(end_data))
+
+    for i in range(0, end_data):
+        count = 0
+        col = i + start_data
+        name = columndata[col]
+
+        filename = "{}/chr{}.{}".format(ndir, c, name)
+        print("=== Writing file {}".format(filename))
+        tic_iter = time.perf_counter()
+        # chrp_data[i] = []
+        for line in data:
+            #print(i, line.split('\t'))
+            first = line.split('\t')[col]  # first =`echo $l | cut -d -f$i`
+            #second =`echo $l | cut -d -f 2, 3, 4, 5, 8 --output-delimiter = '   '`
+            second = line.split('\t')[0:8]
+            # We select the one we want
+            second = [elem for id, elem in enumerate(second) if id in [1, 2, 3, 4, 7]]
+            af_value = second[4].split(';')[8].split('=')[1]
+            # We replace with AF_Value
+            second[4] = af_value
+            try:
+                if ',' in af_value:
+                    # We only keep the first value if more than one (that's what awk is doing)
+                    af_value = float(af_value.split(',')[0])
+                else:
+                    af_value = float(af_value)
+
+                elem = first.split('|')
+                # We skip some lines that do not meet these conditions
+                if (af_value >= 0.5 and elem[0] == '0') or (af_value < 0.5 and elem[0] == '1'):
+                    pass
+                else:
+                    continue
+
+                df.loc[count] = [
+                    ndir,
+                    f"chr{c}.{name}",
+                    f"{second[0]}        {second[1]}    {second[2]}    {second[3]}    {second[4]}"]
+                count += 1
+            except ValueError:
+                continue
+
+    print(df)
+    print("processed in {:0.2f} sec".format(time.perf_counter()-tic_iter))
+
+    outputfile = "chr{}n-{}-{}.tar.gz".format(c, counter, stop)
+    print("== Done. Zipping {} files into {}.".format(end_data, outputfile))
+
+    
+    
+def processing(inputfile, columnfile, c, counter, stop, total):
     print('= Now processing chromosome: {}'.format(c))
     tic = time.perf_counter()
 

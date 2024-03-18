@@ -24,59 +24,24 @@ import collections
 from collections import Counter
 
 
-c_help = 'type a chromosome 1-22'
-pop_help = 'type a population 0-6; 0:ALL, 1:EUR, 2:EAS, 3:AFR, 4:AMR, 5:SAS, 6:GBR'
-description = 'Process mutation sets (-c and -POP are required).'
-parser = argparse.ArgumentParser(description = description)
-parser.add_argument("-c", type=int,
-                    help=c_help)
-parser.add_argument("-pop", 
-                    help=pop_help)
-args = parser.parse_args()
-c = args.c
-
 SIFT = 'NO-SIFT'
-n_runs = 1
-siftfile = './sifted.SIFT.chr' + str(c) + '.txt'
-data_dir = './'
-pop_dir = './'
-outdata_dir = "./chr{0}-{1}/output_no_sift/".format(str(args.c), str(args.pop))
-plots_dir = "./chr{0}-{1}/plots_no_sift/".format(str(args.c), str(args.pop))
-
-if not os.path.exists(outdata_dir):
-  os.makedirs(outdata_dir, exist_ok=True)
-if not os.path.exists(plots_dir):
-  os.makedirs(plots_dir, exist_ok=True)
-
-OutputFormat = '.png'
-
-POP = args.pop
-chrom = 'chr' + str(c)
-
-font = {'family':'serif',
-    'size':14   }
-plt.rc('font', **font)
-
-
-# untar input data
-import tarfile
-tar = tarfile.open(chrom + 'n.tar.gz')
-tar.extractall(path='./' + chrom + 'n')
-tar.close()
-
-tic = time.perf_counter()
 
 class ReadData :
+    def __init__(self, pop_dir: str, data_dir: str, chrom: str):
+        self.pop_dir = pop_dir
+        self.data_dir = data_dir
+        self.chrom = chrom
+
     def read_names(self, POP) :
         print('reading inidviduals')
         tic = time.perf_counter()
-        namefile = pop_dir + POP
+        namefile = self.pop_dir + POP
         f = open(namefile, 'r')
         text = f.read()
         f.close()
         text = text.split()
         all_ids = text[0:]
-        file = data_dir + 'columns.txt'
+        file = self.data_dir + 'columns.txt'
         f = open(file, 'r')
         text = f.read()
         f.close()
@@ -117,7 +82,7 @@ class ReadData :
         total_mutations={}  
         total_mutations_list =[]    
         for name in ids :
-            filename = data_dir + chrom + 'n/' + chrom + '.' + name
+            filename = self.data_dir + self.chrom + 'n/' + self.chrom + '.' + name
             f = open(filename, 'r')
             text = f.read()
             f.close()
@@ -146,12 +111,15 @@ class ReadData :
 
 class Results :
 
+    def __init__(self, n_runs: int) -> None:
+        self.n_runs = n_runs
+
     def group_indivuals(self, total_mutations_list) :
         print('histograms mutations_individuals groups by 26')
         tic = time.perf_counter()
         n_group = 26
         random_mutations_list= []
-        for run in range(n_runs):
+        for run in range(self.n_runs):
             random_mutations_list.append(sample(total_mutations_list, n_group))
         print('time: %s' % (time.perf_counter() - tic))
         return random_mutations_list
@@ -163,8 +131,8 @@ class Results :
         n_p = len(mutation_index_array)
         n_pairs = int(round(n_p/2))
         list_p = np.linspace(0, n_p - 1, n_p).astype(int)
-        pairs_overlap = np.zeros((n_runs, n_pairs))
-        for run in range(n_runs) :
+        pairs_overlap = np.zeros((self.n_runs, n_pairs))
+        for run in range(self.n_runs) :
             randomized_list = sample(list(list_p) , n_p)
             for pq in range(n_pairs) :
                 array1 = mutation_index_array[randomized_list[2*pq]]
@@ -229,6 +197,8 @@ class Results :
         return gene_pair_list
 
 class PlotData :        
+    def __init__(self, c) -> None:
+        self.c = c
 
     def individual_overlap(self, POP, pairs_overlap, outputFile) :
         print('plotting cross matched number of individuals:%s '% len(pairs_overlap))
@@ -261,7 +231,7 @@ class PlotData :
         plt.xlabel('Number of overlapping gene mutations', fontsize = 24)
         plt.ylabel(r'frequency', fontsize = 28)
         text1 = 'population ' + POP + '\n' +\
-            'chromosome ' + str(c) + '\n' + \
+            'chromosome ' + str(self.c) + '\n' + \
             'SIFT < ' + str(SIFT) + '\n' + \
             str(n_runs) + ' runs'
         plt.text(.95, .95, text1, fontsize = 24, 
@@ -313,6 +283,9 @@ class PlotData :
 
 
 class WriteData :
+    def __init__(self, n_runs) -> None:
+        self.n_runs = n_runs
+
     def write_pair_individuals(self, indpairsfile, pairs_overlap) : 
         print('writing pairs overlapping mutations to %s' % indpairsfile)
         tic = time.perf_counter()
@@ -339,7 +312,7 @@ class WriteData :
     
     def write_random_mutations_list(self, random_mutations_filename, random_mutations_list) :
         print('writing a list of 26 random individuals with the number mutations per indiv %s' % random_mutations_filename)
-        for run in range(n_runs):
+        for run in range(self.n_runs):
             filename= random_mutations_filename +'_run_' + str(run) + '.txt'
             f = open(filename, 'w')
             f.writelines(["%s\n" % item  for item in random_mutations_list[run]])
@@ -364,12 +337,33 @@ class WriteData :
     
 
 ############################################################
-if __name__ == '__main__':
 
-    rd = ReadData()
-    res = Results()
-    wr = WriteData()
-    pd = PlotData()
+def run_moverlap(input_dir, siftfile, c, pop, columns=None):
+    POP = pop
+    chrom = 'chr' + str(c)
+    data_dir = './'
+    pop_dir = './'
+    outdata_dir = "./chr{0}-{1}/output_no_sift/".format(str(c), str(pop))
+    plots_dir = "./chr{0}-{1}/plots_no_sift/".format(str(c), str(pop))
+
+    if not os.path.exists(outdata_dir):
+        os.makedirs(outdata_dir, exist_ok=True)
+    if not os.path.exists(plots_dir):
+        os.makedirs(plots_dir, exist_ok=True)
+
+    OutputFormat = '.png'
+
+
+    font = {'family':'serif',
+        'size':14   }
+    plt.rc('font', **font)
+
+    tic = time.perf_counter()
+
+    rd = ReadData(pop_dir=pop_dir, data_dir=data_dir, chrom=chrom)
+    res = Results(n_runs=n_runs)
+    wr = WriteData(n_runs=n_runs)
+    pd = PlotData(c=c)
     
     half_indpairsfile = outdata_dir + 'individual_half_pairs_overlap_chr' + str(c) + '_s' + \
         str(SIFT) + '_' + POP + '.txt'
@@ -401,10 +395,8 @@ if __name__ == '__main__':
         str(SIFT) + '_' + POP + '.txt'
     
 
-
     ids = rd.read_names(POP)
     n_pairs = len(ids)/2
-    
 
     rs_numbers, map_variations = rd.read_rs_numbers(siftfile)
     mutation_index_array, total_mutations, total_mutations_list = rd.read_individuals(ids, rs_numbers)
@@ -439,3 +431,28 @@ if __name__ == '__main__':
     tar.add(outdata_dir)
     tar.add(plots_dir)
     tar.close()
+
+if __name__ == '__main__':
+    c_help = 'type a chromosome 1-22'
+    pop_help = 'type a population 0-6; 0:ALL, 1:EUR, 2:EAS, 3:AFR, 4:AMR, 5:SAS, 6:GBR'
+    description = 'Process mutation sets (-c and -POP are required).'
+    parser = argparse.ArgumentParser(description = description)
+    parser.add_argument("-c", type=int,
+                        help=c_help)
+    parser.add_argument("-pop", 
+                        help=pop_help)
+    args = parser.parse_args()
+    c = args.c
+
+    n_runs = 1
+    siftfile = './sifted.SIFT.chr' + str(c) + '.txt'
+    chrom = 'chr' + str(c)
+
+    # untar input data
+    input_dir = f'./{chrom}n'
+    import tarfile
+    tar = tarfile.open(chrom + 'n.tar.gz')
+    tar.extractall(path='./' + chrom + 'n')
+    tar.close()
+
+    run_moverlap(input_dir=input_dir, siftfile=siftfile, c=c, pop=args.pop)

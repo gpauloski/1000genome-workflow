@@ -24,46 +24,8 @@ from pylab import pcolor, show, colorbar, xticks, yticks
 from matplotlib import pyplot
 import matplotlib as mpl
 
-c_help = 'type a chromosome 1-22'
-pop_help = 'type a population 0-6; 0:ALL, 1:EUR, 2:EAS, 3:AFR, 4:AMR, 5:SAS, 6:GBR'
-description = 'Process mutation sets (-c and -POP are required).'
-parser = argparse.ArgumentParser(description=description)
-parser.add_argument("-c", type=int, help=c_help)
-parser.add_argument("-pop", help=pop_help)
-args = parser.parse_args()
-c = args.c
 
 SIFT = 'NO-SIFT'
-
-n_runs = 1000
-n_indiv = 52
-
-siftfile = './sifted.SIFT.chr' + str(c) + '.txt'
-data_dir = './'
-pop_dir = './'
-outdata_dir = "./chr{0}-{1}-freq/output_no_sift/".format(str(args.c), str(args.pop)) 
-plot_dir = "./chr{0}-{1}-freq/plots_no_sift/".format(str(args.c), str(args.pop)) 
-
-if not os.path.exists(outdata_dir):
-    os.makedirs(outdata_dir, exist_ok=True)
-if not os.path.exists(plot_dir):
-    os.makedirs(plot_dir, exist_ok=True)
-
-OutputFormat = '.png'
-
-POP = args.pop
-chrom = 'chr' + str(c)
-
-font = {'family': 'serif', 'size': 14}
-plt.rc('font', **font)
-
-# untar input data
-import tarfile
-
-tar = tarfile.open(chrom + 'n.tar.gz')
-tar.extractall(path='./' + chrom + 'n')
-tar.close()
-
 
 class ReadData:
     def read_names(self, POP):
@@ -246,9 +208,24 @@ class WriteData:
 
 
 ############################################################
+def run_frequency(input_dir, siftfile, c, pop, columns=None):
+    POP = pop
+    chrom = 'chr' + str(c)
+    data_dir = './'
+    pop_dir = './'
+    outdata_dir = "./chr{0}-{1}-freq/output_no_sift/".format(str(c), str(POP)) 
+    plot_dir = "./chr{0}-{1}-freq/plots_no_sift/".format(str(c), str(POP)) 
 
+    if not os.path.exists(outdata_dir):
+        os.makedirs(outdata_dir, exist_ok=True)
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir, exist_ok=True)
 
-if __name__ == '__main__':
+    OutputFormat = '.png'
+
+    font = {'family': 'serif', 'size': 14}
+    plt.rc('font', **font)
+
     rd = ReadData()
     res = Results()
     wr = WriteData()
@@ -291,3 +268,32 @@ if __name__ == '__main__':
     tar.add(outdata_dir)
     tar.add(plot_dir)
     tar.close()
+    pass
+
+if __name__ == '__main__':
+    c_help = 'type a chromosome 1-22'
+    pop_help = 'type a population 0-6; 0:ALL, 1:EUR, 2:EAS, 3:AFR, 4:AMR, 5:SAS, 6:GBR'
+    description = 'Process mutation sets (-c and -POP are required).'
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("-c", type=int, help=c_help)
+    parser.add_argument("-pop", help=pop_help)
+    args = parser.parse_args()
+    c = args.c
+
+
+    n_runs = 1000
+    n_indiv = 52
+
+    siftfile = './sifted.SIFT.chr' + str(c) + '.txt'
+
+    # untar input data
+    import tarfile
+
+    chrom = 'chr' + str(c)
+    input_dir = f'./{chrom}n'
+    tar = tarfile.open(chrom + 'n.tar.gz')
+    tar.extractall(path=input)
+    tar.close()
+
+    run_frequency(input_dir=input_dir, siftfile=siftfile, c=c, pop=args.pop)
+
