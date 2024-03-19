@@ -8,6 +8,8 @@ import numpy.ma as ma
 from random import sample
 import os.path
 import matplotlib
+import pandas as pd
+import tarfile
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -28,16 +30,22 @@ import matplotlib as mpl
 SIFT = 'NO-SIFT'
 
 class ReadData:
+    def __init__(self, input_dict: dict[str, dict[str, list]], pop_dir: str, data_dir: str, chrom: str):
+        self.input_dict = input_dict
+        self.pop_dir = pop_dir
+        self.data_dir = data_dir
+        self.chrom = chrom
+
     def read_names(self, POP):
         print('reading inidviduals')
         tic = time.perf_counter()
-        namefile = pop_dir + POP
+        namefile = self.pop_dir + POP
         f = open(namefile, 'r')
         text = f.read()
         f.close()
         text = text.split()
         all_ids = text[0:]
-        file = data_dir + 'columns.txt'
+        file = self.data_dir + 'columns.txt'
         f = open(file, 'r')
         text = f.read()
         f.close()
@@ -56,13 +64,12 @@ class ReadData:
         variations = {}
         map_variations = {}
         all_variations = []
-        sift_file = open(siftfile, 'r')
-        for item in sift_file:
-            item = item.split()
+        sift_file = pd.read_pickle(siftfile)
+        for idx, item in sift_file.iterrows():
             if len(item) > 2:
-                rs_numbers.append(item[1])
-                map_variations[item[1]] = item[2]
-                variations[item[0]] = item[2]
+                rs_numbers.append(item.iloc[1])
+                map_variations[item.iloc[1]] = item.iloc[2]
+                variations[item.iloc[0]] = item.iloc[2]
 
         print('time: %s' % (time.perf_counter() - tic))
         return rs_numbers, map_variations
@@ -72,16 +79,19 @@ class ReadData:
         tic = time.perf_counter()
         mutation_index_array = []
         for name in ids:
-            filename = data_dir + chrom + 'n/' + chrom + '.' + name
-            f = open(filename, 'r')
-            text = []
-            for item in f:
-                item = item.split()
-                try:
-                    text.append(item[1])
-                except IndexError as e:
-                    print("ERROR({}): while reading {}: (item: {})".format(str(e), filename, item))        
-            sifted_mutations = list(set(rs_numbers).intersection(text))
+            #filename = self.data_dir + chrom + 'n/' + chrom + '.' + name
+
+            chrom_dir = f'{self.chrom}n'
+            fn = f'{self.chrom}.{name}'
+
+            merged_text = []
+            for i in range(len(self.input_dict[chrom_dir][fn])):
+                df = pd.read_pickle(self.input_dict[chrom_dir][fn][i])
+                text = df['data'].to_list()
+                text = [e for t in text for e in t.split()]
+                merged_text.extend(text)
+
+            sifted_mutations = list(set(rs_numbers).intersection(merged_text))
             mutation_index_array.append(sifted_mutations)
 
         print('time: %s' % (time.perf_counter() - tic))
@@ -90,6 +100,10 @@ class ReadData:
 
 class Results:
 
+    def __init__(self, n_runs: int, n_indiv: int):
+        self.n_runs = n_runs
+        self.n_indiv = n_indiv
+
     def overlap_ind(self, ids, mutation_index_array):
         n_p = len(mutation_index_array)
         print('calculating the number overlapings mutations between %s individuals selected randomly' % n_p)
@@ -97,11 +111,11 @@ class Results:
         list_p = np.linspace(0, n_p - 1, n_p).astype(int)
         mutation_overlap = []
         random_indiv = []
-        for run in range(n_runs):
+        for run in range(self.n_runs):
             randomized_list = sample(list(list_p), n_p)
             result = Counter()
             r_ids = []
-            for pq in range(n_indiv):
+            for pq in range(self.n_indiv):
                 if 2 * pq >= len(randomized_list):
                     break
                 b_multiset = collections.Counter(mutation_index_array[randomized_list[2 * pq]])
@@ -117,7 +131,7 @@ class Results:
         print('calculating the frequency/historgram of overlapings mutations')
         tic = time.perf_counter()
         histogram_overlap = []
-        for run in range(n_runs):
+        for run in range(self.n_runs):
             final_counts = [count for item, count in mutation_overlap[run].items()]
             histogram_overlap.append(collections.Counter(final_counts))
         print('time: %s' % (time.perf_counter() - tic))
@@ -126,10 +140,13 @@ class Results:
 
 class PlotData:
 
+    def __init__(self, n_runs: int):
+        self.n_runs = n_runs
+
     def plot_histogram_overlap(self, POP, histogram_overlap, outputFile):
         print('ploting Histogram mutation overlap to %s' % outputFile)
         tic = time.perf_counter()
-        for run in range(n_runs):
+        for run in range(self.n_runs):
             output = outputFile + str(run) + '.png'
             final_counts = [count for item, count in histogram_overlap[run].items()]
             N = len(final_counts)
@@ -146,14 +163,18 @@ class PlotData:
 
 class WriteData:
 
+    def __init__(self, n_runs: int, n_indiv: int):
+        self.n_runs = n_runs
+        self.n_indiv = n_indiv
+
     def write_histogram_overlap(self, histogram_overlapfile, histogram_overlap):
         print('writing Frequency historgram of mutations overlapping to %s' % histogram_overlapfile)
         tic = time.perf_counter()
-        for run in range(n_runs):
+        for run in range(self.n_runs):
             overlapfile = histogram_overlapfile + str(run) + '.txt'
             f = open(overlapfile, 'w')
             f.write('Number Individuals - Number Mutations  \n')
-            for i in range(1, n_indiv + 1):
+            for i in range(1, self.n_indiv + 1):
                 if i in histogram_overlap[run]:
                     f.write(str(i) + '-' + str(histogram_overlap[run][i]) + '\n')
                 else:
@@ -167,7 +188,7 @@ class WriteData:
     def write_mutation_overlap(self, mutation_overlapfile, mutation_overlap):
         print('writing Mutations overlapping to %s' % mutation_overlapfile)
         tic = time.perf_counter()
-        for run in range(n_runs):
+        for run in range(self.n_runs):
             overlapfile = mutation_overlapfile + str(run) + '.txt'
             f = open(overlapfile, 'w')
             f.write('Mutation Index- Number Overlapings \n')
@@ -178,7 +199,7 @@ class WriteData:
 
     def write_random_indiv(self, randomindiv_file, random_indiv):
         tic = time.perf_counter()
-        for run in range(n_runs):
+        for run in range(self.n_runs):
             randomfile = randomindiv_file + str(run) + '.txt'
             f = open(randomfile, 'w')
             print('writing Random individuals to %s' % randomfile)
@@ -210,9 +231,12 @@ class WriteData:
 ############################################################
 def run_frequency(input_dir, siftfile, c, pop, columns=None):
     POP = pop
+    n_runs = 1000
+    n_indiv = 52
+
     chrom = 'chr' + str(c)
-    data_dir = './'
-    pop_dir = './'
+    data_dir = './data/20130502/'
+    pop_dir = './data/populations/'
     outdata_dir = "./chr{0}-{1}-freq/output_no_sift/".format(str(c), str(POP)) 
     plot_dir = "./chr{0}-{1}-freq/plots_no_sift/".format(str(c), str(POP)) 
 
@@ -226,10 +250,10 @@ def run_frequency(input_dir, siftfile, c, pop, columns=None):
     font = {'family': 'serif', 'size': 14}
     plt.rc('font', **font)
 
-    rd = ReadData()
-    res = Results()
-    wr = WriteData()
-    pd = PlotData()
+    rd = ReadData(input_dict=input_dir, pop_dir=pop_dir, data_dir=data_dir, chrom=chrom)
+    res = Results(n_runs=n_runs, n_indiv=n_indiv)
+    wr = WriteData(n_runs=n_runs, n_indiv=n_indiv)
+    pd = PlotData(n_runs=n_runs)
 
     histogram_overlapfile = outdata_dir + 'Histogram_mutation_overlap_chr' + str(c) + '_s' + \
                             str(SIFT) + '_' + POP + '_'

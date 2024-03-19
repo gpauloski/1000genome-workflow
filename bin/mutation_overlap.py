@@ -22,18 +22,21 @@ from matplotlib import pyplot
 import matplotlib as mpl
 import collections
 from collections import Counter
+import pandas as pd
 
 
 SIFT = 'NO-SIFT'
+n_runs = 1
 
 class ReadData :
-    def __init__(self, pop_dir: str, data_dir: str, chrom: str):
+    def __init__(self, input_dict: dict[str, dict[str, list]], pop_dir: str, data_dir: str, chrom: str):
+        self.input_dict = input_dict
         self.pop_dir = pop_dir
         self.data_dir = data_dir
         self.chrom = chrom
 
     def read_names(self, POP) :
-        print('reading inidviduals')
+        print('reading individuals')
         tic = time.perf_counter()
         namefile = self.pop_dir + POP
         f = open(namefile, 'r')
@@ -61,12 +64,11 @@ class ReadData :
         variations = {}
         map_variations = {}
         all_variations = []
-        sift_file = open(siftfile,'r')
-        for item in sift_file:
-            item = item.split()
+        sift_file = pd.read_pickle(siftfile)
+        for i, item in sift_file.iterrows():
             if len(item) > 2:
-                rs_numbers.append(item[1])
-                map_variations[item[1]] = item[2]
+                rs_numbers.append(item.iloc[1])
+                map_variations[item.iloc[1]] = item.iloc[2]
         
         #seen = set()            
         #[x for x in all_variations if x not in seen and not seen.add(x)]
@@ -83,11 +85,18 @@ class ReadData :
         total_mutations_list =[]    
         for name in ids :
             filename = self.data_dir + self.chrom + 'n/' + self.chrom + '.' + name
-            f = open(filename, 'r')
-            text = f.read()
-            f.close()
-            text = text.split()
-            sifted_mutations = list(set(rs_numbers).intersection(text))
+
+            chrom_dir = f'{self.chrom}n'
+            fn = f'{self.chrom}.{name}'
+
+            merged_text = []
+            for i in range(len(self.input_dict[chrom_dir][fn])):
+                df = pd.read_pickle(self.input_dict[f'{self.chrom}n'][f'{self.chrom}.{name}'][i])
+                text = df['data'].to_list()
+                text = [e for t in text for e in t.split()]
+                merged_text.extend(text)
+                
+            sifted_mutations = list(set(rs_numbers).intersection(merged_text))
             mutation_index_array.append(sifted_mutations)
             total_mutations[name]= len(sifted_mutations)
             total_mutations_list.append(len(sifted_mutations))
@@ -341,8 +350,8 @@ class WriteData :
 def run_moverlap(input_dir, siftfile, c, pop, columns=None):
     POP = pop
     chrom = 'chr' + str(c)
-    data_dir = './'
-    pop_dir = './'
+    data_dir = './data/20130502/'
+    pop_dir = './data/populations/'
     outdata_dir = "./chr{0}-{1}/output_no_sift/".format(str(c), str(pop))
     plots_dir = "./chr{0}-{1}/plots_no_sift/".format(str(c), str(pop))
 
@@ -360,7 +369,7 @@ def run_moverlap(input_dir, siftfile, c, pop, columns=None):
 
     tic = time.perf_counter()
 
-    rd = ReadData(pop_dir=pop_dir, data_dir=data_dir, chrom=chrom)
+    rd = ReadData(input_dict=input_dir, pop_dir=pop_dir, data_dir=data_dir, chrom=chrom)
     res = Results(n_runs=n_runs)
     wr = WriteData(n_runs=n_runs)
     pd = PlotData(c=c)
