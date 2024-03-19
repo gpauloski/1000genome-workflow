@@ -103,7 +103,7 @@ def run_workflow(endpoint_id):
                     counter = counter + step
 
                 # merge job
-                individuals_filename = 'chr%sn.tar.gz' % c_num
+                individuals_filename = 'chr%sn' % c_num
 
                 individuals_fns[individuals_filename] = chrn_dfs
                 individuals_files.append(individuals_fns)
