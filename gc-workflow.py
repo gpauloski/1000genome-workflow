@@ -14,14 +14,12 @@ from bin.mutation_overlap import run_moverlap
 from bin.frequency import run_frequency
 
 
-def run_workflow():
+def run_workflow(endpoint_id):
     datafile = 'data.csv'
     dataset = '20130502'
     ind_jobs = 1
     execution_site = 'local'
     columns = 'columns.txt'
-
-    endpoint_id = '3070f7e1-d667-4be9-9fce-1f04e7a758fe'
 
     populations = []
     for base_file in os.listdir(os.getcwd() + '/data/populations/'):
@@ -159,6 +157,6 @@ def run_workflow():
 
 if __name__ == "__main__":
     start = time_ns()
-    run_workflow
+    run_workflow(endpoint_id=sys.argv[1])
     end = time_ns()
     print(f'Workflow executed with Globus Compute took: {start=}, {end=}, time_ns={end-start}')
