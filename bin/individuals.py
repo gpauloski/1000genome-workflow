@@ -33,6 +33,7 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total):
     ### step 2
     ## Giving a different directory name (chromosome no-counter) for each individuals job
     ndir = 'chr{}n-{}'.format(c, counter)
+    os.makedirs(ndir, exist_ok=True)
 
     ### step 3
     # In the bash version, counter started at 1 but in Python we start at 0. 
