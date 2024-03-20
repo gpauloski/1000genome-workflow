@@ -138,7 +138,7 @@ def run_workflow(endpoint_id):
 
                 sifted_files.append(f_sifted)
                 
-        individuals_files = [in_f.result() for in_f in individuals_files]
+        individuals_files = [fn.result() for in_f in individuals_files for key, fn in in_f.items()]
         sifted_files = [s.result() for s in sifted_files]
         print(f'{sifted_files=}')
 
