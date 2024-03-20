@@ -174,7 +174,7 @@ def run_workflow(endpoint_id, debug=False):
         if debug:
             individuals_files = list(individuals_files.items())[0:2]
 
-        for i, inf in enumerate(individuals_files):
+        for i, inf in enumerate(individuals_files.items()):
             for f_pop in populations:
 
                 mutation_res = gce.submit(
