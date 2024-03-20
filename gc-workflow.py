@@ -14,6 +14,18 @@ from bin.mutation_overlap import run_moverlap
 from bin.frequency import run_frequency
 
 
+def merge_data(chrn_dfs: list[dict[str, str]]):
+    merged_filenames: dict[str, list[str]] = {}
+    
+    for c in chrn_dfs:
+        if k:=c.keys()[0] in merged_filenames:
+            merged_filenames[k].append(c.values()[0])
+        else:
+            merged_filenames[c.keys()[0]] = c.values()[0]
+    
+    return merged_filenames
+
+
 def run_workflow(endpoint_id):
     datafile = 'data.csv'
     dataset = '20130502'
@@ -105,7 +117,13 @@ def run_workflow(endpoint_id):
                 # merge job
                 individuals_filename = 'chr%sn' % c_num
 
-                individuals_fns[individuals_filename] = chrn_dfs
+
+                m_fn = gce.submit(
+                    merge_data,
+                    chrn_dfs
+                )
+
+                individuals_fns[individuals_filename] = m_fn
                 individuals_files.append(individuals_fns)
                 
                 # Sifting Job
@@ -120,6 +138,7 @@ def run_workflow(endpoint_id):
 
                 sifted_files.append(f_sifted)
                 
+        individuals_files = [in_f.result() for in_f in individuals_files]
         sifted_files = [s.result() for s in sifted_files]
         print(f'{sifted_files=}')
 
