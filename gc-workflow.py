@@ -41,8 +41,9 @@ def run_workflow(endpoint_id, debug=False):
     c_nums = []
     individuals_files = []
     sifted_files = []
-    sifted_jobs = []
-    individuals_merge_jobs = []
+    #sifted_jobs = []
+    #individuals_merge_jobs = {}
+    output_fns = {}
 
     with Executor(endpoint_id=endpoint_id) as gce:
         with open(datafile, 'r') as f:
@@ -75,7 +76,6 @@ def run_workflow(endpoint_id, debug=False):
                     threshold = 2
 
                 individuals_fns = {}
-                output_fns = {}
                 
                 individuals_filename = 'chr%sn' % c_num
 
@@ -132,10 +132,10 @@ def run_workflow(endpoint_id, debug=False):
 
                 # merge job
 
-                m_fn = gce.submit(
-                    merge_data,
-                    output_fns
-                )
+                # m_fn = gce.submit(
+                #     merge_data,
+                #     output_fns
+                # )
                 
                 # Sifting Job
                 f_sifting = row[2]
@@ -152,12 +152,17 @@ def run_workflow(endpoint_id, debug=False):
         #individuals_files = [fn.result() for in_f in individuals_files for key, fn in in_f.items()]
         sifted_files = [s.result() for s in sifted_files]
 
+        # merge task
         individuals_files = {}
-        for data in output_fns[individuals_filename]:
-            if data[0] in individuals_files:
-                individuals_files[data[0]].append(data[1])
-            else:
-                individuals_files[data[0]] = [data[1]]
+        for key, val in output_fns.items():
+            for data in val:
+                if key in individuals_files:
+                    if data[0] in individuals_files[key]:
+                        individuals_files[key][data[0]].append(data[1])
+                    else:
+                        individuals_files[key][data[0]] = [data[1]]
+                else:
+                    individuals_files[key] = { data[0] : [data[1]] }
                 
         print(f'{individuals_files=}')
         print(f'{sifted_files=}')
@@ -167,21 +172,20 @@ def run_workflow(endpoint_id, debug=False):
         frequencies = []
 
         if debug:
-            individuals_files = []
-            individuals_files = individuals_files[0:2]
+            individuals_files = list(individuals_files.items())[0:2]
 
         for i, inf in enumerate(individuals_files):
             for f_pop in populations:
 
                 mutation_res = gce.submit(
                     run_moverlap,
-                    input_dir=inf,
+                    input_dir=inf[1],
                     siftfile=sifted_files[i],
                     c=c_nums[i],
                     columns=columns,
                     pop=f_pop
                 )
-                mutations.append(mutation_res)
+                mutations.append(mutation_res.result())
 
                 # run_moverlap(
                 #     input_dir=inf,
@@ -193,13 +197,13 @@ def run_workflow(endpoint_id, debug=False):
                 
                 frequency_res = gce.submit(
                     run_frequency,
-                    input_dir=inf,
+                    input_dir=inf[1],
                     siftfile=sifted_files[i],
                     c=c_nums[i],
                     columns=columns,
                     pop=f_pop
                 )
-                frequencies.append(frequency_res)
+                frequencies.append(frequency_res.result())
 
         mutations = [m.result() for m in mutations]
         print(f'{mutations=}')
