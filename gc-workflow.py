@@ -26,7 +26,7 @@ def merge_data(chrn_dfs: list[dict[str, str]]):
     return merged_filenames
 
 
-def run_workflow(endpoint_id):
+def run_workflow(endpoint_id, debug=False):
     datafile = 'data.csv'
     dataset = '20130502'
     ind_jobs = 1
@@ -70,8 +70,15 @@ def run_workflow(endpoint_id):
                 c_num = c_num[0:c_num.find('.')]
                 c_nums.append(c_num)
 
+                if debug: 
+                    c_nums = [1, 2]
+                    threshold = 2
+
                 individuals_fns = {}
+                output_fns = {}
                 
+                individuals_filename = 'chr%sn' % c_num
+
                 while counter < threshold:
                     stop = counter + step
 
@@ -95,36 +102,40 @@ def run_workflow(endpoint_id):
                     chrom_parts = f_chrom_parts.result()
                     
                     #print(f_chrom_parts)
-                    print('Done f_chrome_parts')
+                    print('Done obtaining chromosome parts')
                     future_chrn_df = []
-                    for chrp in chrom_parts[2]:
+                    chrp_elements = chrom_parts[2]
+
+                    if debug:
+                        chrp_elements = chrp_elements[0:5]
+                    
+                    for chrp in chrp_elements:
                         f_chrn_df = gce.submit(
                             processing_2,
                             chrp_element=chrp,
                             data=chrom_parts[0],
                             ndir=chrom_parts[1],
-                            c=c_num
+                            c=c_num,
                         )
                         future_chrn_df.append(f_chrn_df)
                     
                     for fut in future_chrn_df:
-                        chrn_dfs.append(fut.result())
+                        if individuals_filename in output_fns:
+                            output_fns[individuals_filename].append(fut.result())
+                        else:
+                            output_fns[individuals_filename] = [fut.result()] 
+                        
 
-                    print(chrn_dfs)
+                    print(f'{output_fns=}')
 
                     counter = counter + step
 
                 # merge job
-                individuals_filename = 'chr%sn' % c_num
-
 
                 m_fn = gce.submit(
                     merge_data,
-                    chrn_dfs
+                    output_fns
                 )
-
-                individuals_fns[individuals_filename] = m_fn
-                individuals_files.append(individuals_fns)
                 
                 # Sifting Job
                 f_sifting = row[2]
@@ -138,29 +149,51 @@ def run_workflow(endpoint_id):
 
                 sifted_files.append(f_sifted)
                 
-        individuals_files = [fn.result() for in_f in individuals_files for key, fn in in_f.items()]
+        #individuals_files = [fn.result() for in_f in individuals_files for key, fn in in_f.items()]
         sifted_files = [s.result() for s in sifted_files]
+
+        individuals_files = {}
+        for data in output_fns[individuals_filename]:
+            if data[0] in individuals_files:
+                individuals_files[data[0]].append(data[1])
+            else:
+                individuals_files[data[0]] = [data[1]]
+                
+        print(f'{individuals_files=}')
         print(f'{sifted_files=}')
 
         # Analyses jobs
         mutations = []
         frequencies = []
-        for i in range(len(individuals_files)):
+
+        if debug:
+            individuals_files = []
+            individuals_files = individuals_files[0:2]
+
+        for i, inf in enumerate(individuals_files):
             for f_pop in populations:
 
                 mutation_res = gce.submit(
                     run_moverlap,
-                    input_dir=individuals_files[i],
+                    input_dir=inf,
                     siftfile=sifted_files[i],
                     c=c_nums[i],
                     columns=columns,
                     pop=f_pop
                 )
                 mutations.append(mutation_res)
+
+                # run_moverlap(
+                #     input_dir=inf,
+                #     siftfile=sifted_files[i],
+                #     c=c_nums[i],
+                #     columns=columns,
+                #     f_pop=f_pop
+                # )
                 
                 frequency_res = gce.submit(
                     run_frequency,
-                    input_dir=individuals_files[i],
+                    input_dir=inf,
                     siftfile=sifted_files[i],
                     c=c_nums[i],
                     columns=columns,
@@ -176,6 +209,6 @@ def run_workflow(endpoint_id):
 
 if __name__ == "__main__":
     start = time_ns()
-    run_workflow(endpoint_id=sys.argv[1])
+    run_workflow(endpoint_id=sys.argv[1], debug=bool(int(sys.argv[2])))
     end = time_ns()
     print(f'Workflow executed with Globus Compute took: {start=}, {end=}, time_ns={end-start}')

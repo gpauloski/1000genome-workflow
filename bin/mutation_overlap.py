@@ -83,6 +83,8 @@ class ReadData :
         mutation_index_array = []
         total_mutations={}  
         total_mutations_list =[]    
+
+        # ids = ['HG00096']
         for name in ids :
             filename = self.data_dir + self.chrom + 'n/' + self.chrom + '.' + name
 
@@ -90,8 +92,8 @@ class ReadData :
             fn = f'{self.chrom}.{name}'
 
             merged_text = []
-            for i in range(len(self.input_dict[chrom_dir][fn])):
-                df = pd.read_pickle(self.input_dict[f'{self.chrom}n'][f'{self.chrom}.{name}'][i])
+            for i in range(len(self.input_dict[fn])):
+                df = pd.read_pickle(self.input_dict[fn][i])
                 text = df['data'].to_list()
                 text = [e for t in text for e in t.split()]
                 merged_text.extend(text)

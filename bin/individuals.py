@@ -119,9 +119,10 @@ def processing_2(chrp_element, data, ndir, c):
         except ValueError:
             continue
 
-    op = os.path.join(os.getcwd(), ndir, f"chr{c}.{name}")
+    name = f"chr{c}.{name}"
+    op = os.path.join(os.getcwd(), ndir, name)
     df.to_pickle(op)
-    return op
+    return ( name, op )
     # print("processed in {:0.2f} sec".format(time.perf_counter()-tic_iter))
 
     #outputfile = "chr{}n-{}-{}.tar.gz".format(c, counter, stop)
