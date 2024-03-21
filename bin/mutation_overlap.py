@@ -23,6 +23,7 @@ import matplotlib as mpl
 import collections
 from collections import Counter
 import pandas as pd
+import tarfile
 
 
 SIFT = 'NO-SIFT'
