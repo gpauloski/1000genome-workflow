@@ -185,7 +185,7 @@ def run_workflow(endpoint_id, debug=False):
                     columns=columns,
                     pop=f_pop
                 )
-                mutations.append(mutation_res.result())
+                mutations.append(mutation_res)
 
                 # run_moverlap(
                 #     input_dir=inf,
@@ -203,7 +203,7 @@ def run_workflow(endpoint_id, debug=False):
                     columns=columns,
                     pop=f_pop
                 )
-                frequencies.append(frequency_res.result())
+                frequencies.append(frequency_res)
 
         mutations = [m.result() for m in mutations]
         print(f'{mutations=}')

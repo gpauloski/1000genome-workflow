@@ -287,12 +287,14 @@ def run_frequency(input_dir, siftfile, c, pop, columns=None):
 
     pd.plot_histogram_overlap(POP, histogram_overlap, histogram_overlap_plot)
 
+    outfn = 'chr%s-%s-freq.tar.gz' % (c, POP)
     # gen final output
-    tar = tarfile.open('chr%s-%s-freq.tar.gz' % (c, POP), 'w:gz')
+    tar = tarfile.open(outfn, 'w:gz')
     tar.add(outdata_dir)
     tar.add(plot_dir)
     tar.close()
-    pass
+
+    return outfn
 
 if __name__ == '__main__':
     c_help = 'type a chromosome 1-22'

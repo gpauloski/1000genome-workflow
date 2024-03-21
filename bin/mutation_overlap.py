@@ -438,11 +438,14 @@ def run_moverlap(input_dir, siftfile, c, pop, columns=None):
     gene_pair_list = res.gene_pairs(mutation_index_array)
     wr.write_gene_pairs(genepairsfile, gene_pair_list)
 
+    outfn = 'chr%s-%s.tar.gz' % (c, POP)
     # gen final output
-    tar = tarfile.open('chr%s-%s.tar.gz' % (c, POP), 'w:gz')
+    tar = tarfile.open(outfn, 'w:gz')
     tar.add(outdata_dir)
     tar.add(plots_dir)
     tar.close()
+
+    return outfn
 
 if __name__ == '__main__':
     c_help = 'type a chromosome 1-22'
