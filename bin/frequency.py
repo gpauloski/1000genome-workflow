@@ -85,8 +85,8 @@ class ReadData:
             fn = f'{self.chrom}.{name}'
 
             merged_text = []
-            for i in range(len(self.input_dict[chrom_dir][fn])):
-                df = pd.read_pickle(self.input_dict[chrom_dir][fn][i])
+            for i in range(len(self.input_dict[fn])):
+                df = pd.read_pickle(self.input_dict[fn][i])
                 text = df['data'].to_list()
                 text = [e for t in text for e in t.split()]
                 merged_text.extend(text)
