@@ -6,6 +6,9 @@ import re
 import time
 import subprocess
 import pandas as pd
+import threading
+
+from utils import Bench
 
 def readfile(file):
     with open(file, 'r') as f:
@@ -14,6 +17,7 @@ def readfile(file):
 
 def sifting(inputfile, c):
     tic = time.perf_counter()
+    start = time.time()
 
     # unzipped = 'ALL.chr{}.vcf'.format(c)
     final = 'sifted.SIFT.chr{}.txt'.format(c)
@@ -80,7 +84,10 @@ def sifting(inputfile, c):
 
     print("= Line, id, ENSG id, SIFT, and phenotype printed to {} in {:0.2f} seconds.".format(final, time.perf_counter() - tic))
 
-    return final
+    duration = time.perf_counter() - tic
+    end = time.time()
+    
+    return (Bench(threading.get_native_id(), 'sifting' , start, end, duration), final)
 
 if __name__ == "__main__":
     sifting(inputfile=sys.argv[1], c=sys.argv[2])

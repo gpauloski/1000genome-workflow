@@ -8,6 +8,9 @@ import tarfile
 import shutil
 import pandas as pd
 import pickle
+import threading
+
+from utils import Bench
 
 
 def compress(output, input_dir):
@@ -22,6 +25,7 @@ def readfile(file):
 def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total):
     print('= Now processing chromosome: {}'.format(c))
     tic = time.perf_counter()
+    start = time.time()
 
     counter = int(counter)
     ending = min(int(stop), int(total))
@@ -73,11 +77,17 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total):
 
     with open(outname, 'wb+') as of:
         pickle.dump(data, of) 
-    return (outname, ndir, chrp_data)
+
+    end = time.time()
+    duration = time.perf_counter() - tic
+    return (Bench(threading.get_native_id() ,'processing_chrom_parts', start, end, duration),(outname, ndir, chrp_data))
         
     
 
 def processing_2(chrp_element, data, ndir, c):
+    tic = time.perf_counter()
+    start = time.time()
+
     col = chrp_element['col']
     name = chrp_element['name']
 
@@ -122,7 +132,11 @@ def processing_2(chrp_element, data, ndir, c):
     name = f"chr{c}.{name}"
     op = os.path.join(os.getcwd(), ndir, name)
     df.to_pickle(op)
-    return ( name, op )
+
+    duration = time.perf_counter() - tic
+    end = time.time()
+
+    return (Bench(threading.get_native_id(), 'processing_2', start, end, duration),( name, op ))
     # print("processed in {:0.2f} sec".format(time.perf_counter()-tic_iter))
 
     #outputfile = "chr{}n-{}-{}.tar.gz".format(c, counter, stop)

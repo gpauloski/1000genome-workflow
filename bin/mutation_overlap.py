@@ -2,7 +2,6 @@
 
 import time
 
-tic = time.perf_counter()
 import numpy as np
 import numpy.ma as ma
 from random import sample
@@ -24,17 +23,20 @@ import collections
 from collections import Counter
 import pandas as pd
 import tarfile
+import threading
 
+from utils import Bench
 
 SIFT = 'NO-SIFT'
 n_runs = 1
 
 class ReadData :
-    def __init__(self, input_dict: dict[str, dict[str, list]], pop_dir: str, data_dir: str, chrom: str):
+    def __init__(self, input_dict: dict[str, dict[str, list]], pop_dir: str, data_dir: str, chrom: str, debug=False):
         self.input_dict = input_dict
         self.pop_dir = pop_dir
         self.data_dir = data_dir
         self.chrom = chrom
+        self.debug = debug
 
     def read_names(self, POP) :
         print('reading individuals')
@@ -85,7 +87,8 @@ class ReadData :
         total_mutations={}  
         total_mutations_list =[]    
 
-        # ids = ['HG00096']
+        if self.debug:
+            ids = ['HG00096', 'HG00097', 'HG00099', 'HG00100', 'HG00101']
         for name in ids :
             filename = self.data_dir + self.chrom + 'n/' + self.chrom + '.' + name
 
@@ -123,13 +126,18 @@ class ReadData :
 
 class Results :
 
-    def __init__(self, n_runs: int) -> None:
+    def __init__(self, n_runs: int, debug: bool = False) -> None:
         self.n_runs = n_runs
+        self.debug = debug
 
     def group_indivuals(self, total_mutations_list) :
         print('histograms mutations_individuals groups by 26')
         tic = time.perf_counter()
+
         n_group = 26
+        if self.debug:
+            n_group = 2
+        
         random_mutations_list= []
         for run in range(self.n_runs):
             random_mutations_list.append(sample(total_mutations_list, n_group))
@@ -328,7 +336,6 @@ class WriteData :
             filename= random_mutations_filename +'_run_' + str(run) + '.txt'
             f = open(filename, 'w')
             f.writelines(["%s\n" % item  for item in random_mutations_list[run]])
-        print('time: %s' % (time.perf_counter() - tic))
     
     def write_mutation_index_array(self, mutation_index_array_file, mutation_index_array):
         print('writing mutation array  to %s' % mutation_index_array_file)
@@ -336,7 +343,6 @@ class WriteData :
         for item in mutation_index_array:
             f.write("%s\n" % item)
         f.close()
-        print('time: %s' % (time.perf_counter() - tic))
 
     def write_map_variations(self, map_variations_file, map_variations) :
         print('writing map_variations to %s' % map_variations_file)
@@ -345,12 +351,13 @@ class WriteData :
         for key, count in map_variations.items() :
             f.write(key + '\t' + str(count) + '\n')
         f.close()
-        print('time: %s' % (time.perf_counter() - tic))
     
 
 ############################################################
 
-def run_moverlap(input_dir, siftfile, c, pop, columns=None):
+def run_moverlap(input_dir, siftfile, c, pop, columns=None, debug=False):
+    tic = time.perf_counter()
+    start = time.time()
     POP = pop
     chrom = 'chr' + str(c)
     data_dir = './data/20130502/'
@@ -370,10 +377,8 @@ def run_moverlap(input_dir, siftfile, c, pop, columns=None):
         'size':14   }
     plt.rc('font', **font)
 
-    tic = time.perf_counter()
-
-    rd = ReadData(input_dict=input_dir, pop_dir=pop_dir, data_dir=data_dir, chrom=chrom)
-    res = Results(n_runs=n_runs)
+    rd = ReadData(input_dict=input_dir, pop_dir=pop_dir, data_dir=data_dir, chrom=chrom, debug=debug)
+    res = Results(n_runs=n_runs, debug=debug)
     wr = WriteData(n_runs=n_runs)
     pd = PlotData(c=c)
     
@@ -445,7 +450,9 @@ def run_moverlap(input_dir, siftfile, c, pop, columns=None):
     tar.add(plots_dir)
     tar.close()
 
-    return outfn
+    duration = time.perf_counter() - tic
+    end = time.time()
+    return Bench(threading.get_native_id(), 'mutation_overlap', start, end, duration)
 
 if __name__ == '__main__':
     c_help = 'type a chromosome 1-22'

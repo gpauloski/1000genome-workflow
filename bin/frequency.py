@@ -10,6 +10,7 @@ import os.path
 import matplotlib
 import pandas as pd
 import tarfile
+import threading
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -26,15 +27,17 @@ from pylab import pcolor, show, colorbar, xticks, yticks
 from matplotlib import pyplot
 import matplotlib as mpl
 
+from utils import Bench
 
 SIFT = 'NO-SIFT'
 
 class ReadData:
-    def __init__(self, input_dict: dict[str, dict[str, list]], pop_dir: str, data_dir: str, chrom: str):
+    def __init__(self, input_dict: dict[str, dict[str, list]], pop_dir: str, data_dir: str, chrom: str, debug: bool = False):
         self.input_dict = input_dict
         self.pop_dir = pop_dir
         self.data_dir = data_dir
         self.chrom = chrom
+        self.debug = debug
 
     def read_names(self, POP):
         print('reading inidviduals')
@@ -78,6 +81,9 @@ class ReadData:
         print('reading in individual mutation files')
         tic = time.perf_counter()
         mutation_index_array = []
+
+        if self.debug:
+            ids = ['HG00096', 'HG00097', 'HG00099', 'HG00100', 'HG00101']
         for name in ids:
             #filename = self.data_dir + chrom + 'n/' + chrom + '.' + name
 
@@ -229,7 +235,10 @@ class WriteData:
 
 
 ############################################################
-def run_frequency(input_dir, siftfile, c, pop, columns=None):
+def run_frequency(input_dir, siftfile, c, pop, columns=None, debug: bool = False):
+    tic = time.perf_counter()
+    start = time.time()
+
     POP = pop
     n_runs = 1000
     n_indiv = 52
@@ -250,7 +259,7 @@ def run_frequency(input_dir, siftfile, c, pop, columns=None):
     font = {'family': 'serif', 'size': 14}
     plt.rc('font', **font)
 
-    rd = ReadData(input_dict=input_dir, pop_dir=pop_dir, data_dir=data_dir, chrom=chrom)
+    rd = ReadData(input_dict=input_dir, pop_dir=pop_dir, data_dir=data_dir, chrom=chrom, debug=debug)
     res = Results(n_runs=n_runs, n_indiv=n_indiv)
     wr = WriteData(n_runs=n_runs, n_indiv=n_indiv)
     pd = PlotData(n_runs=n_runs)
@@ -294,7 +303,9 @@ def run_frequency(input_dir, siftfile, c, pop, columns=None):
     tar.add(plot_dir)
     tar.close()
 
-    return outfn
+    duration = time.perf_counter() - tic
+    end = time.time() 
+    return Bench(threading.get_native_id(), 'frequency', start, end, duration)
 
 if __name__ == '__main__':
     c_help = 'type a chromosome 1-22'
