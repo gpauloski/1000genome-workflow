@@ -25,7 +25,7 @@ import pandas as pd
 import tarfile
 import threading
 
-from utils import Bench
+from bin.utils import Bench
 
 SIFT = 'NO-SIFT'
 n_runs = 1

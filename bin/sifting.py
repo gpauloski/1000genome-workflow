@@ -8,7 +8,7 @@ import subprocess
 import pandas as pd
 import threading
 
-from utils import Bench
+from bin.utils import Bench
 
 def readfile(file):
     with open(file, 'r') as f:

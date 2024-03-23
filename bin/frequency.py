@@ -27,7 +27,7 @@ from pylab import pcolor, show, colorbar, xticks, yticks
 from matplotlib import pyplot
 import matplotlib as mpl
 
-from utils import Bench
+from bin.utils import Bench
 
 SIFT = 'NO-SIFT'
 
