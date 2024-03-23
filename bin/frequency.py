@@ -83,7 +83,7 @@ class ReadData:
         mutation_index_array = []
 
         if self.debug:
-            ids = ['HG00096', 'HG00097', 'HG00099', 'HG00100', 'HG00101']
+            ids = list(set(n.split('.')[1] for n in self.input_dict.keys()))
         for name in ids:
             #filename = self.data_dir + chrom + 'n/' + chrom + '.' + name
 
@@ -92,7 +92,12 @@ class ReadData:
 
             merged_text = []
             for i in range(len(self.input_dict[fn])):
-                df = pd.read_pickle(self.input_dict[fn][i])
+
+                if isinstance(self.input_dict[fn][i], str):
+                    df = pd.read_pickle(self.input_dict[fn][i])
+                else:
+                    df = self.input_dict[fn][i]
+
                 text = df['data'].to_list()
                 text = [e for t in text for e in t.split()]
                 merged_text.extend(text)

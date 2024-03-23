@@ -15,9 +15,13 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def sifting(inputfile, c):
+def sifting(inputfile, c, pfuture=None):
     tic = time.perf_counter()
     start = time.time()
+
+    with open('debug.out', 'w+') as f:
+        f.write('test \n')
+        f.write(f'{pfuture}\n\n')
 
     # unzipped = 'ALL.chr{}.vcf'.format(c)
     final = 'sifted.SIFT.chr{}.txt'.format(c)
@@ -80,14 +84,22 @@ def sifting(inputfile, c):
         else:
             df.loc[i] = [temp[0], temp[1], temp[2], temp[4], temp[6]]
     
-    df.to_pickle(final)    
+    if pfuture is not None:
+        df.to_pickle(final)
+    else:
+        pfuture.set_result(df)
 
     print("= Line, id, ENSG id, SIFT, and phenotype printed to {} in {:0.2f} seconds.".format(final, time.perf_counter() - tic))
 
     duration = time.perf_counter() - tic
     end = time.time()
     
-    return (Bench(threading.get_native_id(), 'sifting' , start, end, duration), final)
+    benchmark = Bench(threading.get_native_id(), 'sifting' , start, end, duration)
+    
+    if pfuture is not None:
+        return (benchmark)
+
+    return (benchmark, final)
 
 if __name__ == "__main__":
     sifting(inputfile=sys.argv[1], c=sys.argv[2])

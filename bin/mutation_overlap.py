@@ -88,7 +88,7 @@ class ReadData :
         total_mutations_list =[]    
 
         if self.debug:
-            ids = ['HG00096', 'HG00097', 'HG00099', 'HG00100', 'HG00101']
+            ids = list(set(n.split('.')[1] for n in self.input_dict.keys()))
         for name in ids :
             filename = self.data_dir + self.chrom + 'n/' + self.chrom + '.' + name
 
@@ -97,7 +97,12 @@ class ReadData :
 
             merged_text = []
             for i in range(len(self.input_dict[fn])):
-                df = pd.read_pickle(self.input_dict[fn][i])
+
+                if isinstance(self.input_dict[fn][i], str):
+                    df = pd.read_pickle(self.input_dict[fn][i])
+                else:
+                    df = self.input_dict[fn][i]
+
                 text = df['data'].to_list()
                 text = [e for t in text for e in t.split()]
                 merged_text.extend(text)
@@ -108,6 +113,7 @@ class ReadData :
             total_mutations_list.append(len(sifted_mutations))
             #print len(list(seen)), len(seen)
         
+        print(mutation_index_array, ids)
         print ('mutation index array for %s : %s' % ( ids[0], mutation_index_array[0]))
         print ('total_len_mutations for %s : %s' % ( ids[0], total_mutations[ids[0]]))
         print('total_mutations_list is %s ' % total_mutations_list)
@@ -355,7 +361,7 @@ class WriteData :
 
 ############################################################
 
-def run_moverlap(input_dir, siftfile, c, pop, columns=None, debug=False):
+def run_moverlap(input_dir, siftfile, c, pop, columns=None, debug=False, proxy=None):
     tic = time.perf_counter()
     start = time.time()
     POP = pop

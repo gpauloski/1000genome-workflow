@@ -22,7 +22,7 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total):
+def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, pfuture=None):
     print('= Now processing chromosome: {}'.format(c))
     tic = time.perf_counter()
     start = time.time()
@@ -32,7 +32,7 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total):
 
     ### step 0
     unzipped = 'ALL.chr{}.individuals.vcf'.format(c)
-    rawdata = readfile(inputfile)
+    data= pd.read_csv(inputfile, delimiter='\t', comment='#', header=None, nrows=stop)[counter: stop]
 
     ### step 2
     ## Giving a different directory name (chromosome no-counter) for each individuals job
@@ -47,10 +47,12 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total):
 
     # We consider the line from counter to stop and we don't over total, then we remove lines starting with '#'
     #sed -n "$counter"','"$stop"'p;'"$total"'q' $unzipped | grep -ve "#" > cc
-    regex = re.compile('(?!#)')
+    #regex = re.compile('(?!#)')
     # print(counter, min(stop, total), data[int(counter):int(min(stop, total))] )
-    data = list(filter(regex.match, rawdata[counter:ending]))
-    data = [x.rstrip('\n') for x in data] # Remove \n from words 
+    #print(f'{data=}')
+    #return
+    #data = list(filter(regex.match, rawdata[counter:ending]))
+    #data = [x.rstrip('\n') for x in data] # Remove \n from words 
 
     # chrp_data = {}
     columndata = readfile(columnfile)[0].rstrip('\n').split('\t')
@@ -75,38 +77,49 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total):
     
     outname = f"{inputfile}.pkl"
 
-    with open(outname, 'wb+') as of:
-        pickle.dump(data, of) 
-
+    if pfuture is None:
+        with open(outname, 'wb+') as of:
+            pickle.dump(data, of) 
+    else:
+        pfuture.set_result((data, ndir, chrp_data))
+        
     end = time.time()
     duration = time.perf_counter() - tic
-    return (Bench(threading.get_native_id() ,'processing_chrom_parts', start, end, duration),(outname, ndir, chrp_data))
+
+    benchmark = Bench(threading.get_native_id() ,'processing_chrom_parts', start, end, duration)
+
+    if pfuture is not None:
+        return benchmark
+
+    return (benchmark,(outname, ndir, chrp_data))
         
     
 
-def processing_2(chrp_element, data, ndir, c):
+def processing_2(chrp_element, data, ndir, c, pfuture = None):
     tic = time.perf_counter()
     start = time.time()
 
     col = chrp_element['col']
     name = chrp_element['name']
 
-    with open(data, 'rb') as f:
-        data = pickle.load(f)
+    if pfuture is None:
+        with open(data, 'rb') as f:
+            data = pickle.load(f)
 
     df = pd.DataFrame(columns=['ndir', 'chr', 'data'])
     count = 0
 
-    for line in data:
+    for _, line in data.iterrows():
         #print(i, line.split('\t'))
-        first = line.split('\t')[col]  # first =`echo $l | cut -d -f$i`
+        first = line[col]  # first =`echo $l | cut -d -f$i`
         #second =`echo $l | cut -d -f 2, 3, 4, 5, 8 --output-delimiter = '   '`
-        second = line.split('\t')[0:8]
+        second = line[0:8]
         # We select the one we want
         second = [elem for id, elem in enumerate(second) if id in [1, 2, 3, 4, 7]]
         af_value = second[4].split(';')[8].split('=')[1]
         # We replace with AF_Value
         second[4] = af_value
+
         try:
             if ',' in af_value:
                 # We only keep the first value if more than one (that's what awk is doing)
@@ -130,13 +143,21 @@ def processing_2(chrp_element, data, ndir, c):
             continue
 
     name = f"chr{c}.{name}"
-    op = os.path.join(os.getcwd(), ndir, name)
-    df.to_pickle(op)
+
+    if pfuture is None:
+        op = os.path.join(os.getcwd(), ndir, name)
+        df.to_pickle(op)
+    else:
+        pfuture.set_result((name, df))
 
     duration = time.perf_counter() - tic
     end = time.time()
 
-    return (Bench(threading.get_native_id(), 'processing_2', start, end, duration),( name, op ))
+    benchmark = Bench(threading.get_native_id(), 'processing_2', start, end, duration)
+    if pfuture is not None:
+        return benchmark
+        
+    return (benchmark,( name, op ))
     # print("processed in {:0.2f} sec".format(time.perf_counter()-tic_iter))
 
     #outputfile = "chr{}n-{}-{}.tar.gz".format(c, counter, stop)

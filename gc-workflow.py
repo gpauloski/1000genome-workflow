@@ -2,7 +2,13 @@
 import csv
 import os
 import sys
+import pandas as pd
+import matplotlib.pyplot as plt
 from time import time_ns
+
+from proxystore.connectors.redis import RedisConnector
+from proxystore.store import Store
+from proxystore.store.future import ProxyFuture
 
 from globus_compute_sdk import Executor
 
@@ -12,8 +18,6 @@ from bin.sifting import sifting
 from bin.mutation_overlap import run_moverlap
 from bin.frequency import run_frequency
 
-import pandas as pd
-import matplotlib.pyplot as plt
 
 def create_gantt(benchmarks, name):
     df = pd.DataFrame(benchmarks)
@@ -21,48 +25,39 @@ def create_gantt(benchmarks, name):
     df['colour'] = df['task'].map(colours)
     df['norm_start'] = df['start'] - df['start'].min()
     df.to_pickle(f'{name}.pkl')
-    plt.barh(y=df['thread_id'], width=df['duration'], left=df['norm_start'], color=df['color'])
+    plt.barh(y=df['thread_id'], width=df['duration'], left=df['norm_start'], color=df['colour'])
     plt.savefig(f'{name}.pdf')
 
+class Workflow:
+    populations_dir: str = '/data/populations/'
+    datafile: str = 'data.csv'
+    dataset: str = '20130502'
+    ind_jobs: int = 40
+    columns: str = 'columns.txt'
+    populations: list[str] = []
+    benchmarks: list = []
+    c_nums: list = []
+    individuals_files: list = []
+    sifted_files: list =[]
+    output_fns: dict = {}
 
-# class Workflow:
-#     datafile: str
-#     dataset: str
-#     ind_jobs: int
-#     columns: str
-#     populations: list[str]
-#     populations_dir: str
+    def __init__(self) -> None:
+        for base_file in os.listdir(os.getcwd() + self.populations_dir):
+            f_pop = base_file
+            self.populations.append(f_pop)
 
-def run_workflow(endpoint_id, debug=False):
-    datafile = 'data.csv'
-    dataset = '20130502'
-    ind_jobs = 1
-    execution_site = 'local'
-    columns = 'columns.txt'
-
-    populations = []
-    for base_file in os.listdir(os.getcwd() + '/data/populations/'):
-        f_pop = base_file
-        populations.append(f_pop)
-
-    benchmarks = []
-    c_nums = []
-    individuals_files = []
-    sifted_files = []
-    output_fns = {}
-
-    with Executor(endpoint_id=endpoint_id) as gce:
-        with open(datafile, 'r') as f:
+    def run_gc_workflow(self, gce, debug=False):
+        with open(self.datafile, 'r') as f:
             for row in csv.reader(f):
                 base_file = row[0]
                 threshold = int(row[1])
                 # To ensure we do not create too many individuals jobs
-                ind_jobs = min(ind_jobs, threshold)
-                step = threshold // ind_jobs
-                rest = threshold % ind_jobs
+                self.ind_jobs = min(self.ind_jobs, threshold)
+                step = threshold // self.ind_jobs
+                rest = threshold % self.ind_jobs
                 if rest != 0:
                     sys.exit("ERROR: for file {}: required individuals jobs {} does not divide the number of rows {}.".format(
-                        base_file, ind_jobs, threshold))
+                        base_file, self.ind_jobs, threshold))
 
                 counter = 1
 
@@ -70,14 +65,14 @@ def run_workflow(endpoint_id, debug=False):
 
                 # Individuals Jobs
                 f_individuals = base_file
-                base_file_path = os.path.join(os.getcwd(), 'data', dataset, f_individuals)
+                base_file_path = os.path.join(os.getcwd(), 'data', self.dataset, f_individuals)
 
                 c_num = base_file[base_file.find('chr')+3:]
                 c_num = c_num[0:c_num.find('.')]
-                c_nums.append(c_num)
+                self.c_nums.append(c_num)
 
                 if debug: 
-                    c_nums = [1, 2]
+                    self.c_nums = [1, 2]
                     threshold = 2
 
                 individuals_fns = {}
@@ -93,7 +88,7 @@ def run_workflow(endpoint_id, debug=False):
                     f_chrom_parts = gce.submit(
                         processing_chrom_parts,
                         inputfile=base_file_path,
-                        columnfile=os.path.join(os.getcwd(), 'data', dataset, columns),
+                        columnfile=os.path.join(os.getcwd(), 'data', self.dataset, self.columns),
                         c=c_num,
                         counter=counter,
                         stop=stop,
@@ -102,7 +97,7 @@ def run_workflow(endpoint_id, debug=False):
                     
                     chrom_parts = f_chrom_parts.result()
                     chrom_bench = chrom_parts[0]
-                    benchmarks.append(chrom_bench)
+                    self.benchmarks.append(chrom_bench)
                     
                     #print(f_chrom_parts)
                     print('Done obtaining chromosome parts')
@@ -130,19 +125,19 @@ def run_workflow(endpoint_id, debug=False):
                         future_chrn_df.append(res[1])
                         f_chrn_bench.append(res[0])
 
-                    benchmarks.extend(f_chrn_bench)
+                    self.benchmarks.extend(f_chrn_bench)
                     
                     for fut in future_chrn_df:
-                        if individuals_filename in output_fns:
-                            output_fns[individuals_filename].append(fut)
+                        if individuals_filename in self.output_fns:
+                            self.output_fns[individuals_filename].append(fut)
                         else:
-                            output_fns[individuals_filename] = [fut] 
+                            self.output_fns[individuals_filename] = [fut] 
                         
                     counter = counter + step
                 
                 # Sifting Job
                 f_sifting = row[2]
-                f_sifting = os.path.join(os.getcwd(), 'data', dataset, 'sifting', f_sifting)
+                f_sifting = os.path.join(os.getcwd(), 'data', self.dataset, 'sifting', f_sifting)
 
                 f_sifted = gce.submit(
                     sifting,
@@ -150,11 +145,11 @@ def run_workflow(endpoint_id, debug=False):
                     c=c_num
                 )
 
-                sifted_files.append(f_sifted)
+                self.sifted_files.append(f_sifted)
                 
             # merge task
             individuals_files = {}
-            for key, val in output_fns.items():
+            for key, val in self.output_fns.items():
                 for data in val:
                     if key in individuals_files:
                         if data[0] in individuals_files[key]:
@@ -165,8 +160,8 @@ def run_workflow(endpoint_id, debug=False):
                         individuals_files[key] = { data[0] : [data[1]] }
 
                         
-        sifted_files = [s.result() for s in sifted_files]
-        benchmarks.extend([s[0] for s in sifted_files])
+        self.sifted_files = [s.result() for s in self.sifted_files]
+        self.benchmarks.extend([s[0] for s in self.sifted_files])
         print(f'Sifting completed')
 
         # Analyses jobs
@@ -179,14 +174,14 @@ def run_workflow(endpoint_id, debug=False):
             individuals_files = individuals_files.items()
 
         for i, inf in enumerate(individuals_files):
-            for f_pop in populations:
+            for f_pop in self.populations:
 
                 mutation_res = gce.submit(
                     run_moverlap,
                     input_dir=inf[1],
-                    siftfile=sifted_files[i][1],
-                    c=c_nums[i],
-                    columns=columns,
+                    siftfile=self.sifted_files[i][1],
+                    c=self.c_nums[i],
+                    columns=self.columns,
                     pop=f_pop,
                     debug=debug
                 )
@@ -195,24 +190,233 @@ def run_workflow(endpoint_id, debug=False):
                 frequency_res = gce.submit(
                     run_frequency,
                     input_dir=inf[1],
-                    siftfile=sifted_files[i][1],
-                    c=c_nums[i],
-                    columns=columns,
+                    siftfile=self.sifted_files[i][1],
+                    c=self.c_nums[i],
+                    columns=self.columns,
                     pop=f_pop,
                     debug=debug
                 )
                 frequencies.append(frequency_res)
 
-        benchmarks.extend([m.result() for m in mutations])
-        benchmarks.extend([freq.result() for freq in frequencies])
-        return benchmarks
+        self.benchmarks.extend([m.result() for m in mutations])
+        self.benchmarks.extend([freq.result() for freq in frequencies])
+        return self.benchmarks
+
+
+    def run_proxy_workflow(self, gce, store, debug=False):
+        with open(self.datafile, 'r') as f:
+            for row in csv.reader(f):
+                base_file = row[0]
+                threshold = int(row[1])
+                # To ensure we do not create too many individuals jobs
+                self.ind_jobs = min(self.ind_jobs, threshold)
+                step = threshold // self.ind_jobs
+                rest = threshold % self.ind_jobs
+                if rest != 0:
+                    sys.exit("ERROR: for file {}: required individuals jobs {} does not divide the number of rows {}.".format(
+                        base_file, self.ind_jobs, threshold))
+
+                counter = 1
+
+                output_files = []
+
+                # Individuals Jobs
+                f_individuals = base_file
+                base_file_path = os.path.join(os.getcwd(), 'data', self.dataset, f_individuals)
+
+                c_num = base_file[base_file.find('chr')+3:]
+                c_num = c_num[0:c_num.find('.')]
+                self.c_nums.append(c_num)
+
+                if debug: 
+                    self.c_nums = [1, 2]
+                    threshold = 2
+
+                individuals_fns = {}
+                
+                individuals_filename = 'chr%sn' % c_num
+
+                while counter < threshold:
+                    stop = counter + step
+
+                    out_name = os.path.join('chr%sn-%s-%s.tar.gz' % (c_num, counter, stop))
+                    output_files.append(out_name)
+                    pfuture: ProxyFuture[tuple] = store.future()
+                    
+                    chrom_bench = gce.submit(
+                        processing_chrom_parts,
+                        inputfile=base_file_path,
+                        columnfile=os.path.join(os.getcwd(), 'data', self.dataset, self.columns),
+                        c=c_num,
+                        counter=counter,
+                        stop=stop,
+                        total=threshold,
+                        pfuture=pfuture
+                    )
+
+                    # processing_chrom_parts(
+                    #     inputfile=base_file_path,
+                    #     columnfile=os.path.join(os.getcwd(), 'data', self.dataset, self.columns),
+                    #     c=c_num,
+                    #     counter=counter,
+                    #     stop=stop,
+                    #     total=threshold,
+                    #     pfuture=pfuture
+                    # )
+                    chrp_res = pfuture.result() 
+                    self.benchmarks.append(chrom_bench)
+                    
+                    #print(f_chrom_parts)
+                    print('Done obtaining chromosome parts')
+                    future_chrn_df = []
+                    f_chrn_bench = []
+                    chrp_elements = chrp_res[2]
+
+                    if debug:
+                        chrp_elements = chrp_elements[0:5]
+                    
+
+                    futures = [store.future() for i in range(len(chrp_elements))]
+                    pf_chrn_df: ProxyFuture[(pd.DataFrame, str)] = store.future()
+
+                    for i,chrp in enumerate(chrp_elements):
+                        f_chrn_bench.append(
+                            gce.submit(
+                                processing_2,
+                                chrp_element=chrp,
+                                data=chrp_res[0],
+                                ndir=chrp_res[1],
+                                c=c_num,
+                                pfuture=futures[i],
+                            )
+                        )
+                        # f_chrn_bench.append(
+                        #     processing_2(
+                        #         chrp_element=chrp,
+                        #         data=chrp_res[0],
+                        #         ndir=chrp_res[1],
+                        #         c=c_num,
+                        #         pfuture=futures[i],
+                        #     )
+                        # )
+
+                        #futures.append(pf_chrn_df)
+
+                    for fut in futures:
+                        future_chrn_df.append(fut)
+
+                    self.benchmarks.extend(f_chrn_bench)
+                    
+                    for fut in future_chrn_df:
+                        if individuals_filename in self.output_fns:
+                            self.output_fns[individuals_filename].append(fut)
+                        else:
+                            self.output_fns[individuals_filename] = [fut] 
+                        
+                    counter = counter + step
+
+                # Sifting Job
+                f_sifting = row[2]
+                f_sifting = os.path.join(os.getcwd(), 'data', self.dataset, 'sifting', f_sifting)
+
+                pf_sifting = store.future()
+                f_sifted = gce.submit(
+                    sifting,
+                    inputfile=f_sifting,
+                    c=c_num,
+                    pfuture=pf_sifting
+                )
+                # print(f'sifting file {c_num=}')
+                # f_sifted = sifting(
+                #     inputfile=f_sifting,
+                #     c=c_num,
+                #     pfuture=pf_sifting
+                # )
+
+                self.sifted_files.append(pf_sifting.proxy())
+                self.benchmarks.append(f_sifted)
+                
+            # merge task
+            individuals_files = {}
+            for key, val in self.output_fns.items():
+                for data in val:
+                    data = data.result()
+                    if key in individuals_files:
+                        if data[0] in individuals_files[key]:
+                            individuals_files[key][data[0]].append(store.proxy(data[1]))
+                        else:
+                            individuals_files[key][data[0]] = [store.proxy(data[1])]
+                    else:
+                        individuals_files[key] = { data[0] : [store.proxy(data[1])] }
+
+                        
+        self.sifted_files = [s.proxy() for s in self.sifted_files]
+        self.benchmarks.extend([s[0] for s in self.sifted_files])
+        print(f'Sifting completed')
+
+        # Analyses jobs
+        mutations = []
+        frequencies = []
+
+        if debug:
+            individuals_files = list(individuals_files.items())[0:2]
+        else:
+            individuals_files = individuals_files.items()
+
+        for i, inf in enumerate(individuals_files):
+            for f_pop in self.populations:
+
+                mutation_res = gce.submit(
+                    run_moverlap,
+                    input_dir=inf[1],
+                    siftfile=self.sifted_files[i],
+                    c=self.c_nums[i],
+                    columns=self.columns,
+                    pop=f_pop,
+                    debug=debug
+                )
+                # run_moverlap(
+                #     input_dir=inf[1],
+                #     siftfile=self.sifted_files[i][1],
+                #     c=self.c_nums[i],
+                #     columns=self.columns,
+                #     pop=f_pop,
+                #     debug=debug
+                # )
+                mutations.append(mutation_res)
+                
+                frequency_res = gce.submit(
+                    run_frequency,
+                    input_dir=inf[1],
+                    siftfile=self.sifted_files[i],
+                    c=self.c_nums[i],
+                    columns=self.columns,
+                    pop=f_pop,
+                    debug=debug
+                )
+                frequencies.append(frequency_res)
+                print(frequency_res.result())
+
+        self.benchmarks.extend([m.result() for m in mutations])
+        self.benchmarks.extend([freq.result() for freq in frequencies])
+        return self.benchmarks
+
 
 if __name__ == "__main__":
     start = time_ns()
-    benchmarks = run_workflow(endpoint_id=sys.argv[1], debug=bool(int(sys.argv[2])))
-    end = time_ns()
-    print(f'Workflow executed with Globus Compute took: {start=}, {end=}, time_ns={end-start}')
+    w = Workflow()
+    endpoint_id = sys.argv[1]
 
-    df = create_gantt(benchmarks)
+    with Executor(endpoint_id=endpoint_id) as gce:
+        with Store('genome-store', RedisConnector('localhost', 6379)) as store:
+            benchmarks = w.run_proxy_workflow(gce=gce, store=store, debug=bool(int(sys.argv[2])))
+            df = create_gantt(benchmarks=benchmarks, name='proxy-bench-trial')
+    # with Executor(endpoint_id=endpoint_id) as gce:
+    #     benchmarks = w.run_gc_workflow(gce=gce, debug=bool(int(sys.argv[2])))
+
+    # end = time_ns()
+    # print(f'Workflow executed with Globus Compute took: {start=}, {end=}, time_ns={end-start}')
+
+    # df = create_gantt(benchmarks, 'gc-bench')
 
     
