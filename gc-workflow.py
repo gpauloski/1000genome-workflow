@@ -4,7 +4,7 @@ import os
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
-from time import time_ns
+from time import perf_counter
 
 from proxystore.connectors.redis import RedisConnector
 from proxystore.store import Store
@@ -403,13 +403,15 @@ class Workflow:
 
 
 if __name__ == "__main__":
-    start = time_ns()
+    start = perf_counter()
     w = Workflow()
     endpoint_id = sys.argv[1]
 
     with Executor(endpoint_id=endpoint_id) as gce:
         with Store('genome-store', RedisConnector('localhost', 6379)) as store:
             benchmarks = w.run_proxy_workflow(gce=gce, store=store, debug=bool(int(sys.argv[2])))
+            duration = perf_counter() - start
+            print(f'Workflow executed with Globus Compute and Proxy Futures took: {duration=}s')
             df = create_gantt(benchmarks=benchmarks, name='proxy-bench-trial')
     # with Executor(endpoint_id=endpoint_id) as gce:
     #     benchmarks = w.run_gc_workflow(gce=gce, debug=bool(int(sys.argv[2])))
