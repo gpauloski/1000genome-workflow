@@ -22,7 +22,7 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, pfuture=None, dask=False):
+def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, chrp_data_future=None, data_future=None, dask=False):
     print('= Now processing chromosome: {}'.format(c))
     tic = time.perf_counter()
     start = time.time()
@@ -77,18 +77,21 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, pfutu
     
     outname = f"{inputfile}.pkl"
 
-    if pfuture is None and not dask:
+    if chrp_data_future is None and not dask:
         with open(outname, 'wb+') as of:
             pickle.dump(data, of) 
-    elif pfuture is not None:
-        pfuture.set_result((data, ndir, chrp_data))
+    elif chrp_data_future is not None:
+        chrp_data_future.set_result((ndir, chrp_data))
+        # We could call this earlier, but it doesn't matter because the client
+        # has to block on chrp_data_future first.
+        data_future.set_result(data)
         
     end = time.time()
     duration = time.perf_counter() - tic
 
     benchmark = Bench(threading.get_native_id() ,'processing_chrom_parts', start, end, duration)
 
-    if pfuture is not None:
+    if chrp_data_future is not None:
         return benchmark
     elif dask:
         return (benchmark, (data, ndir, chrp_data))
@@ -151,7 +154,7 @@ def processing_2(chrp_element, data, ndir, c, pfuture = None, dask=False):
     if pfuture is None and not dask:
         df.to_pickle(op)
     elif pfuture is not None:
-        pfuture.set_result((name, df))
+        pfuture.set_result(df)
 
     duration = time.perf_counter() - tic
     end = time.time()
