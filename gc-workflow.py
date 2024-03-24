@@ -140,7 +140,7 @@ class Workflow:
                             self.output_fns[individuals_filename] = [fut] 
                         
                     counter = counter + step
-                
+
                 # Sifting Job
                 f_sifting = row[2]
                 f_sifting = os.path.join(os.getcwd(), 'data', self.dataset, 'sifting', f_sifting)
@@ -247,8 +247,9 @@ class Workflow:
 
                     out_name = os.path.join('chr%sn-%s-%s.tar.gz' % (c_num, counter, stop))
                     output_files.append(out_name)
-                    pfuture: ProxyFuture[tuple] = store.future()
-                    
+                    chrp_data_future: ProxyFuture[tuple] = store.future(polling_interval=0.001)
+                    data_future: ProxyFuture[...] = store.future(polling_interval=0.001)
+
                     chrom_bench = gce.submit(
                         processing_chrom_parts,
                         inputfile=base_file_path,
@@ -257,22 +258,22 @@ class Workflow:
                         counter=counter,
                         stop=stop,
                         total=threshold,
-                        pfuture=pfuture
+                        chrp_data_future=chrp_data_future,
+                        data_future=data_future
                     )
 
-                    chrp_res = pfuture.result() 
+                    ndir, chrp_elements = chrp_data_future.result()
                     self.benchmarks.append(chrom_bench.result())
                     
                     print('Done obtaining chromosome parts')
                     future_chrn_df = []
                     f_chrn_bench = []
-                    chrp_elements = chrp_res[2]
 
                     if debug:
                         chrp_elements = chrp_elements[0:5]
                     
 
-                    futures = [store.future() for i in range(len(chrp_elements))]
+                    futures = [store.future(polling_interval=0.001) for i in range(len(chrp_elements))]
                     #pf_chrn_df: ProxyFuture[(pd.DataFrame, str)] = store.future()
 
                     for i,chrp in enumerate(chrp_elements):
@@ -280,31 +281,29 @@ class Workflow:
                             gce.submit(
                                 processing_2,
                                 chrp_element=chrp,
-                                data=store.proxy(chrp_res[0]),
-                                ndir=chrp_res[1],
+                                data=data_future.proxy(),
+                                ndir=ndir,
                                 c=c_num,
                                 pfuture=futures[i],
                             )
                         )
 
-                    for fut in futures:
-                        future_chrn_df.append(fut)
+                        name = f'chr{c_num}.{chrp["name"]}'
+                        if individuals_filename not in self.output_fns:
+                            self.output_fns[individuals_filename] = []
+                        self.output_fns[individuals_filename].append(
+                            (name, futures[i].proxy())
+                        )
 
                     self.benchmarks.extend(f_chrn_bench)
-                    
-                    for fut in future_chrn_df:
-                        if individuals_filename in self.output_fns:
-                            self.output_fns[individuals_filename].append(fut)
-                        else:
-                            self.output_fns[individuals_filename] = [fut] 
-                        
+
                     counter = counter + step
 
                 # Sifting Job
                 f_sifting = row[2]
                 f_sifting = os.path.join(os.getcwd(), 'data', self.dataset, 'sifting', f_sifting)
 
-                pf_sifting = store.future()
+                pf_sifting = store.future(polling_interval=0.001)
                 f_sifted = gce.submit(
                     sifting,
                     inputfile=f_sifting,
@@ -312,25 +311,23 @@ class Workflow:
                     pfuture=pf_sifting
                 )
 
-                self.sifted_files.append(pf_sifting)
+                self.sifted_files.append(pf_sifting.proxy())
                 self.benchmarks.append(f_sifted)
-                
+
             # merge task
-            print('Merging results')        
+            print('Merging results')
             individuals_files = {}
             for key, val in self.output_fns.items():
-                for data in val:
+                for name, data_proxy in val:
                     data = data.result()
                     if key in individuals_files:
-                        if data[0] in individuals_files[key]:
-                            individuals_files[key][data[0]].append(store.proxy(data[1]))
+                        if name in individuals_files[key]:
+                            individuals_files[key][name].append(data_proxy)
                         else:
-                            individuals_files[key][data[0]] = [store.proxy(data[1])]
+                            individuals_files[key][name] = [data_proxy]
                     else:
-                        individuals_files[key] = { data[0] : [store.proxy(data[1])] }
+                        individuals_files[key] = { name : [data_proxy] }
 
-                        
-        self.sifted_files = [s.result() for s in self.sifted_files]
         print(f'Sifting completed')
 
         # Analyses jobs
@@ -348,7 +345,7 @@ class Workflow:
                 mutation_res = gce.submit(
                     run_moverlap,
                     input_dir=inf[1],
-                    siftfile=store.proxy(self.sifted_files[i]),
+                    siftfile=self.sifted_files[i],
                     c=self.c_nums[i],
                     columns=self.columns,
                     pop=f_pop,
@@ -367,7 +364,7 @@ class Workflow:
                 frequency_res = gce.submit(
                     run_frequency,
                     input_dir=inf[1],
-                    siftfile=store.proxy(self.sifted_files[i]),
+                    siftfile=self.sifted_files[i],
                     c=self.c_nums[i],
                     columns=self.columns,
                     pop=f_pop,
