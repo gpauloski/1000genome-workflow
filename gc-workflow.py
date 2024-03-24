@@ -401,7 +401,7 @@ class Workflow:
                 )
                 frequencies.append(frequency_res)
 
-        self.benchmarks = [b.result() for b in self.benchmarks if isinstance(b, ComputeFuture)]
+        self.benchmarks = [b.result() if isinstance(b, ComputeFuture) else b for b in self.benchmarks]
         self.benchmarks.extend([m.result() for m in mutations])
         print('Collected mutations')
         self.benchmarks.extend([freq.result() for freq in frequencies])
@@ -556,27 +556,36 @@ class Workflow:
                 )
                 frequencies.append(frequency_res)
 
+        self.benchmarks = [b.compute() for b in self.benchmarks]
         self.benchmarks.extend([m.compute() for m in mutations])
         self.benchmarks.extend([freq.compute() for freq in frequencies])
-        print(self.benchmarks)
         return self.benchmarks
         pass
 
 if __name__ == "__main__":
-    start = perf_counter()
     w = Workflow()
     endpoint_id = sys.argv[1]
     debug = bool(int(sys.argv[2]))
-    # w.run_dask_delayed_wf(debug=debug)
-    with Executor(endpoint_id=endpoint_id) as gce:
-        with Store('genome-store', RedisConnector('localhost', 6379)) as store:
-            benchmarks = w.run_proxy_workflow(gce=gce, store=store, debug=debug)
-            duration = perf_counter() - start
-            print(f'Workflow executed with Globus Compute and Proxy Futures took: {duration=}s')
-            df = create_gantt(benchmarks=benchmarks, name='proxy-bench-trial')
+    option = sys.argv[3]
 
-    # with Executor(endpoint_id=endpoint_id) as gce:
-    #     benchmarks = w.run_gc_workflow(gce=gce, debug=bool(int(sys.argv[2])))
+    tic = perf_counter()
+    if option == 'dask':
+        benchmarks = w.run_dask_delayed_wf(debug=debug)
+        df = create_gantt(benchmarks=benchmarks, name='dask-trial')
+        duration = perf_counter() - tic
+        print(f'Workflow executed with Dask Delayed took: {duration=}s')
+    elif option == 'proxy':
+        with Executor(endpoint_id=endpoint_id) as gce:
+            with Store('genome-store', RedisConnector('localhost', 6379)) as store:
+                benchmarks = w.run_proxy_workflow(gce=gce, store=store, debug=debug)
+                duration = perf_counter() - tic
+                print(f'Workflow executed with Globus Compute and Proxy Futures took: {duration=}s')
+                df = create_gantt(benchmarks=benchmarks, name='proxy-bench-trial')
+    else:
+        with Executor(endpoint_id=endpoint_id) as gce:
+            benchmarks = w.run_gc_workflow(gce=gce, debug=bool(int(sys.argv[2])))
+            duration = perf_counter() - tic
+            print(f'Workflow executed with Globus Compute took: {duration=}s')
 
     # end = time_ns()
     # print(f'Workflow executed with Globus Compute took: {start=}, {end=}, time_ns={end-start}')
