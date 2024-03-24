@@ -5,6 +5,8 @@ import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import dask
+
+from dask.distributed import Client
 from time import perf_counter
 
 from proxystore.connectors.redis import RedisConnector
@@ -258,19 +260,9 @@ class Workflow:
                         pfuture=pfuture
                     )
 
-                    # processing_chrom_parts(
-                    #     inputfile=base_file_path,
-                    #     columnfile=os.path.join(os.getcwd(), 'data', self.dataset, self.columns),
-                    #     c=c_num,
-                    #     counter=counter,
-                    #     stop=stop,
-                    #     total=threshold,
-                    #     pfuture=pfuture
-                    # )
                     chrp_res = pfuture.result() 
                     self.benchmarks.append(chrom_bench.result())
                     
-                    #print(f_chrom_parts)
                     print('Done obtaining chromosome parts')
                     future_chrn_df = []
                     f_chrn_bench = []
@@ -284,28 +276,16 @@ class Workflow:
                     #pf_chrn_df: ProxyFuture[(pd.DataFrame, str)] = store.future()
 
                     for i,chrp in enumerate(chrp_elements):
-                        # f_chrn_bench.append(
-                        #     gce.submit(
-                        #         processing_2,
-                        #         chrp_element=chrp,
-                        #         data=chrp_res[0],
-                        #         ndir=chrp_res[1],
-                        #         c=c_num,
-                        #         pfuture=futures[i],
-                        #     )
-                        # )
                         f_chrn_bench.append(
-                            processing_2(
+                            gce.submit(
+                                processing_2,
                                 chrp_element=chrp,
-                                data=chrp_res[0],
+                                data=store.proxy(chrp_res[0]),
                                 ndir=chrp_res[1],
                                 c=c_num,
                                 pfuture=futures[i],
                             )
                         )
-                        # print(f'{f_chrn_bench=}')
-                        #futures.append(pf_chrn_df.result())
-                        #futures[i].result()
 
                     for fut in futures:
                         future_chrn_df.append(fut)
@@ -331,12 +311,6 @@ class Workflow:
                     c=c_num,
                     pfuture=pf_sifting
                 )
-                # print(f'sifting file {c_num=}')
-                # f_sifted = sifting(
-                #     inputfile=f_sifting,
-                #     c=c_num,
-                #     pfuture=pf_sifting
-                # )
 
                 self.sifted_files.append(pf_sifting)
                 self.benchmarks.append(f_sifted)
@@ -393,7 +367,7 @@ class Workflow:
                 frequency_res = gce.submit(
                     run_frequency,
                     input_dir=inf[1],
-                    siftfile=self.sifted_files[i],
+                    siftfile=store.proxy(self.sifted_files[i]),
                     c=self.c_nums[i],
                     columns=self.columns,
                     pop=f_pop,
@@ -409,6 +383,7 @@ class Workflow:
         return self.benchmarks
 
     def run_dask_delayed_wf(self, debug=False):
+        client = Client()
         with open(self.datafile, 'r') as f:
             for row in csv.reader(f):
                 base_file = row[0]
@@ -556,9 +531,11 @@ class Workflow:
                 )
                 frequencies.append(frequency_res)
 
-        self.benchmarks = [b.compute() for b in self.benchmarks]
-        self.benchmarks.extend([m.compute() for m in mutations])
-        self.benchmarks.extend([freq.compute() for freq in frequencies])
+        # self.benchmarks = client.gather(self.benchmarks)
+        self.benchmarks.extend(mutations)
+        self.benchmarks.extend(frequencies)
+        self.benchmarks = dask.compute(*self.benchmarks)
+        client.close()
         return self.benchmarks
         pass
 
@@ -570,10 +547,11 @@ if __name__ == "__main__":
 
     tic = perf_counter()
     if option == 'dask':
-        benchmarks = w.run_dask_delayed_wf(debug=debug)
-        duration = perf_counter() - tic
-        print(f'Workflow executed with Dask Delayed took: {duration=}s')
-        df = create_gantt(benchmarks=benchmarks, name='dask-trial')
+        with dask.config.set(scheduler='processes'):
+            benchmarks = w.run_dask_delayed_wf(debug=debug)
+            duration = perf_counter() - tic
+            print(f'Workflow executed with Dask Delayed took: {duration=}s')
+            df = create_gantt(benchmarks=benchmarks, name='dask-trial')
     elif option == 'proxy':
         with Executor(endpoint_id=endpoint_id) as gce:
             with Store('genome-store', RedisConnector('localhost', 6379)) as store:
