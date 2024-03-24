@@ -571,9 +571,9 @@ if __name__ == "__main__":
     tic = perf_counter()
     if option == 'dask':
         benchmarks = w.run_dask_delayed_wf(debug=debug)
-        df = create_gantt(benchmarks=benchmarks, name='dask-trial')
         duration = perf_counter() - tic
         print(f'Workflow executed with Dask Delayed took: {duration=}s')
+        df = create_gantt(benchmarks=benchmarks, name='dask-trial')
     elif option == 'proxy':
         with Executor(endpoint_id=endpoint_id) as gce:
             with Store('genome-store', RedisConnector('localhost', 6379)) as store:
@@ -586,6 +586,7 @@ if __name__ == "__main__":
             benchmarks = w.run_gc_workflow(gce=gce, debug=bool(int(sys.argv[2])))
             duration = perf_counter() - tic
             print(f'Workflow executed with Globus Compute took: {duration=}s')
+            df = create_gantt(benchmarks=benchmarks, name='gc-trial')
 
     # end = time_ns()
     # print(f'Workflow executed with Globus Compute took: {start=}, {end=}, time_ns={end-start}')
