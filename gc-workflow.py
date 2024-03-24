@@ -453,7 +453,7 @@ class Workflow:
                         stop=stop,
                         total=threshold,
                         dask=True
-                    )
+                    ).persist()
                     
                     #chrom_parts = f_chrom_parts.compute()
                     chrom_bench = f_chrom_parts[0]
@@ -481,7 +481,7 @@ class Workflow:
                         futures.append(f_chrn_df)
 
                     for fut in futures:
-                        future_chrn_df.append(fut[1])
+                        future_chrn_df.append(fut[1].persist())
                         f_chrn_bench.append(fut[0])
 
                     self.benchmarks.extend(f_chrn_bench)
@@ -504,7 +504,7 @@ class Workflow:
                     dask=True
                 )
 
-                self.sifted_files.append(f_sifted)
+                self.sifted_files.append(f_sifted.persist())
 
             # merge task
             individuals_files = {}
@@ -556,7 +556,7 @@ class Workflow:
                 )
                 frequencies.append(frequency_res)
 
-        self.benchmarks = [b.persist() for b in self.benchmarks]
+        self.benchmarks = [b.compute() for b in self.benchmarks]
         self.benchmarks.extend([m.compute() for m in mutations])
         self.benchmarks.extend([freq.compute() for freq in frequencies])
         return self.benchmarks
