@@ -268,7 +268,7 @@ class Workflow:
                     #     pfuture=pfuture
                     # )
                     chrp_res = pfuture.result() 
-                    self.benchmarks.append(chrom_bench.result)
+                    self.benchmarks.append(chrom_bench.result())
                     
                     #print(f_chrom_parts)
                     print('Done obtaining chromosome parts')
@@ -556,7 +556,7 @@ class Workflow:
                 )
                 frequencies.append(frequency_res)
 
-        self.benchmarks = [b.compute() for b in self.benchmarks]
+        self.benchmarks = [b.persist() for b in self.benchmarks]
         self.benchmarks.extend([m.compute() for m in mutations])
         self.benchmarks.extend([freq.compute() for freq in frequencies])
         return self.benchmarks
