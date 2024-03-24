@@ -319,7 +319,6 @@ class Workflow:
             individuals_files = {}
             for key, val in self.output_fns.items():
                 for name, data_proxy in val:
-                    data_proxy = data_proxy.result()
                     if key in individuals_files:
                         if name in individuals_files[key]:
                             individuals_files[key][name].append(data_proxy)
