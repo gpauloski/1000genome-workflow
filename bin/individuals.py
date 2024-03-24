@@ -22,7 +22,7 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, pfuture=None):
+def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, pfuture=None, dask=False):
     print('= Now processing chromosome: {}'.format(c))
     tic = time.perf_counter()
     start = time.time()
@@ -77,10 +77,10 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, pfutu
     
     outname = f"{inputfile}.pkl"
 
-    if pfuture is None:
+    if pfuture is None and not dask:
         with open(outname, 'wb+') as of:
             pickle.dump(data, of) 
-    else:
+    elif pfuture is not None:
         pfuture.set_result((data, ndir, chrp_data))
         
     end = time.time()
@@ -90,19 +90,21 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, pfutu
 
     if pfuture is not None:
         return benchmark
+    elif dask:
+        return (benchmark, (data, ndir, chrp_data))
 
     return (benchmark,(outname, ndir, chrp_data))
         
     
 
-def processing_2(chrp_element, data, ndir, c, pfuture = None):
+def processing_2(chrp_element, data, ndir, c, pfuture = None, dask=False):
     tic = time.perf_counter()
     start = time.time()
 
     col = chrp_element['col']
     name = chrp_element['name']
 
-    if pfuture is None:
+    if pfuture is None and not dask:
         with open(data, 'rb') as f:
             data = pickle.load(f)
 
@@ -144,10 +146,11 @@ def processing_2(chrp_element, data, ndir, c, pfuture = None):
 
     name = f"chr{c}.{name}"
 
-    if pfuture is None:
-        op = os.path.join(os.getcwd(), ndir, name)
+    op = os.path.join(os.getcwd(), ndir, name)
+
+    if pfuture is None and not dask:
         df.to_pickle(op)
-    else:
+    elif pfuture is not None:
         pfuture.set_result((name, df))
 
     duration = time.perf_counter() - tic
@@ -156,6 +159,8 @@ def processing_2(chrp_element, data, ndir, c, pfuture = None):
     benchmark = Bench(threading.get_native_id(), 'processing_2', start, end, duration)
     if pfuture is not None:
         return benchmark
+    elif dask:
+        return (benchmark, (name, df.to_csv()))
         
     return (benchmark,( name, op ))
     # print("processed in {:0.2f} sec".format(time.perf_counter()-tic_iter))

@@ -15,13 +15,9 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def sifting(inputfile, c, pfuture=None):
+def sifting(inputfile, c, pfuture=None, dask=False):
     tic = time.perf_counter()
     start = time.time()
-
-    with open('debug.out', 'w+') as f:
-        f.write('test \n')
-        f.write(f'{pfuture}\n\n')
 
     # unzipped = 'ALL.chr{}.vcf'.format(c)
     final = 'sifted.SIFT.chr{}.txt'.format(c)
@@ -84,9 +80,9 @@ def sifting(inputfile, c, pfuture=None):
         else:
             df.loc[i] = [temp[0], temp[1], temp[2], temp[4], temp[6]]
     
-    if pfuture is not None:
+    if pfuture is None and not dask:
         df.to_pickle(final)
-    else:
+    elif pfuture is not None:
         pfuture.set_result(df)
 
     print("= Line, id, ENSG id, SIFT, and phenotype printed to {} in {:0.2f} seconds.".format(final, time.perf_counter() - tic))
@@ -98,7 +94,8 @@ def sifting(inputfile, c, pfuture=None):
     
     if pfuture is not None:
         return (benchmark)
-
+    elif dask:
+        return (benchmark, df.to_csv())
     return (benchmark, final)
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ import argparse
 from pylab import pcolor, show, colorbar, xticks, yticks
 from matplotlib import pyplot
 import matplotlib as mpl
+from io import StringIO
 
 from bin.utils import Bench
 
@@ -67,14 +68,25 @@ class ReadData:
         variations = {}
         map_variations = {}
         all_variations = []
-        sift_file = pd.read_pickle(siftfile)
+
+        try:
+            if os.path.exists(siftfile):
+                sift_file = pd.read_pickle(siftfile)
+            elif isinstance(siftfile, str):
+                sift_file = pd.read_csv(StringIO(siftfile))
+            else:
+                sift_file = siftfile
+        except TypeError as e:
+            sift_file = siftfile
+
         for idx, item in sift_file.iterrows():
             if len(item) > 2:
-                rs_numbers.append(item.iloc[1])
-                map_variations[item.iloc[1]] = item.iloc[2]
-                variations[item.iloc[0]] = item.iloc[2]
+                rs_numbers.append(item.iloc[2])
+                map_variations[item.iloc[2]] = item.iloc[3]
+                variations[item.iloc[1]] = item.iloc[3]
 
         print('time: %s' % (time.perf_counter() - tic))
+        print('read_rs_numbers completed')
         return rs_numbers, map_variations
 
     def read_individuals(self, ids, rs_numbers):
@@ -84,6 +96,7 @@ class ReadData:
 
         if self.debug:
             ids = list(set(n.split('.')[1] for n in self.input_dict.keys()))
+
         for name in ids:
             #filename = self.data_dir + chrom + 'n/' + chrom + '.' + name
 
@@ -92,11 +105,13 @@ class ReadData:
 
             merged_text = []
             for i in range(len(self.input_dict[fn])):
+                df = self.input_dict[fn][i]
 
-                if isinstance(self.input_dict[fn][i], str):
-                    df = pd.read_pickle(self.input_dict[fn][i])
-                else:
-                    df = self.input_dict[fn][i]
+                if isinstance(df, str):
+                    if df[0] != ',':
+                        df = pd.read_pickle(df)
+                    else:
+                        df = pd.read_csv(StringIO(df))
 
                 text = df['data'].to_list()
                 text = [e for t in text for e in t.split()]

@@ -25,6 +25,8 @@ import pandas as pd
 import tarfile
 import threading
 
+from io import StringIO
+
 from bin.utils import Bench
 
 SIFT = 'NO-SIFT'
@@ -67,11 +69,21 @@ class ReadData :
         variations = {}
         map_variations = {}
         all_variations = []
-        sift_file = pd.read_pickle(siftfile)
+
+        try:
+            if os.path.exists(siftfile):
+                sift_file = pd.read_pickle(siftfile)
+            elif isinstance(siftfile, str):
+                sift_file = pd.read_csv(StringIO(siftfile))
+            else:
+                sift_file = siftfile
+        except TypeError as e:
+            sift_file = siftfile
+
         for i, item in sift_file.iterrows():
-            if len(item) > 2:
-                rs_numbers.append(item.iloc[1])
-                map_variations[item.iloc[1]] = item.iloc[2]
+            if len(item) > 3:
+                rs_numbers.append(item.iloc[2])
+                map_variations[item.iloc[2]] = item.iloc[3]
         
         #seen = set()            
         #[x for x in all_variations if x not in seen and not seen.add(x)]
@@ -89,6 +101,7 @@ class ReadData :
 
         if self.debug:
             ids = list(set(n.split('.')[1] for n in self.input_dict.keys()))
+                    
         for name in ids :
             filename = self.data_dir + self.chrom + 'n/' + self.chrom + '.' + name
 
@@ -97,11 +110,13 @@ class ReadData :
 
             merged_text = []
             for i in range(len(self.input_dict[fn])):
+                df = self.input_dict[fn][i]
 
-                if isinstance(self.input_dict[fn][i], str):
-                    df = pd.read_pickle(self.input_dict[fn][i])
-                else:
-                    df = self.input_dict[fn][i]
+                if isinstance(df, str):
+                    if df[0] != ',':
+                        df = pd.read_pickle(df)
+                    else:
+                        df = pd.read_csv(StringIO(df))
 
                 text = df['data'].to_list()
                 text = [e for t in text for e in t.split()]
@@ -113,7 +128,6 @@ class ReadData :
             total_mutations_list.append(len(sifted_mutations))
             #print len(list(seen)), len(seen)
         
-        print(mutation_index_array, ids)
         print ('mutation index array for %s : %s' % ( ids[0], mutation_index_array[0]))
         print ('total_len_mutations for %s : %s' % ( ids[0], total_mutations[ids[0]]))
         print('total_mutations_list is %s ' % total_mutations_list)
