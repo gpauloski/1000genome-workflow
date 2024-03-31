@@ -22,7 +22,7 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, chrp_data_future=None, data_future=None, dask=False):
+def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, results_dir, chrp_data_future=None, data_future=None, dask=False):
     print('= Now processing chromosome: {}'.format(c))
     tic = time.perf_counter()
     start = time.time()
@@ -36,7 +36,7 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, chrp_
 
     ### step 2
     ## Giving a different directory name (chromosome no-counter) for each individuals job
-    ndir = 'chr{}n-{}'.format(c, counter)
+    ndir = os.path.join(results_dir, 'chr{}n-{}'.format(c, counter))
     os.makedirs(ndir, exist_ok=True)
 
     ### step 3
@@ -100,7 +100,15 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, chrp_
         
     
 
-def processing_2(chrp_element, data, ndir, c, pfuture = None, dask=False):
+def processing_2(
+    chrp_element,
+    data,
+    ndir,
+    c,
+    results_dir: str,
+    pfuture = None,
+    dask=False,
+):
     tic = time.perf_counter()
     start = time.time()
 
@@ -149,7 +157,7 @@ def processing_2(chrp_element, data, ndir, c, pfuture = None, dask=False):
 
     name = f"chr{c}.{name}"
 
-    op = os.path.join(os.getcwd(), ndir, name)
+    op = os.path.join(results_dir, ndir, name)
 
     if pfuture is None and not dask:
         df.to_pickle(op)

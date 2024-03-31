@@ -255,7 +255,7 @@ class WriteData:
 
 
 ############################################################
-def run_frequency(input_dir, siftfile, c, pop, columns=None, debug: bool = False):
+def run_frequency(input_dir, siftfile, c, pop, data_dir, results_dir, columns=None, debug: bool = False):
     tic = time.perf_counter()
     start = time.time()
 
@@ -264,10 +264,17 @@ def run_frequency(input_dir, siftfile, c, pop, columns=None, debug: bool = False
     n_indiv = 52
 
     chrom = 'chr' + str(c)
-    data_dir = './data/20130502/'
-    pop_dir = './data/populations/'
-    outdata_dir = "./chr{0}-{1}-freq/output_no_sift/".format(str(c), str(POP)) 
-    plot_dir = "./chr{0}-{1}-freq/plots_no_sift/".format(str(c), str(POP)) 
+    base_data_dir = data_dir
+    data_dir = os.path.join(base_data_dir, 'data/20130502/')
+    pop_dir = os.path.join(base_data_dir, 'data/populations/')
+    outdata_dir = os.path.join(
+        results_dir,
+        "chr{0}-{1}-freq/output_no_sift/".format(str(c), str(POP)),
+    )
+    plot_dir = os.path.join(
+        results_dir,
+        "chr{0}-{1}-freq/plots_no_sift/".format(str(c), str(POP)),
+    )
 
     if not os.path.exists(outdata_dir):
         os.makedirs(outdata_dir, exist_ok=True)
@@ -316,7 +323,7 @@ def run_frequency(input_dir, siftfile, c, pop, columns=None, debug: bool = False
 
     pd.plot_histogram_overlap(POP, histogram_overlap, histogram_overlap_plot)
 
-    outfn = 'chr%s-%s-freq.tar.gz' % (c, POP)
+    outfn = os.path.join(results_dir, 'chr%s-%s-freq.tar.gz' % (c, POP))
     # gen final output
     tar = tarfile.open(outfn, 'w:gz')
     tar.add(outdata_dir)

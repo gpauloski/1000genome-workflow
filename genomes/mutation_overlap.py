@@ -43,7 +43,7 @@ class ReadData :
     def read_names(self, POP) :
         print('reading individuals')
         tic = time.perf_counter()
-        namefile = self.pop_dir + POP
+        namefile = os.path.join(self.pop_dir, POP)
         f = open(namefile, 'r')
         text = f.read()
         f.close()
@@ -375,15 +375,22 @@ class WriteData :
 
 ############################################################
 
-def run_moverlap(input_dir, siftfile, c, pop, columns=None, debug=False, proxy=None):
+def run_moverlap(input_dir, siftfile, c, pop, data_dir, results_dir, columns=None, debug=False, proxy=None):
     tic = time.perf_counter()
     start = time.time()
     POP = pop
     chrom = 'chr' + str(c)
-    data_dir = './data/20130502/'
-    pop_dir = './data/populations/'
-    outdata_dir = "./chr{0}-{1}/output_no_sift/".format(str(c), str(pop))
-    plots_dir = "./chr{0}-{1}/plots_no_sift/".format(str(c), str(pop))
+    base_data_dir = data_dir
+    data_dir = os.path.join(base_data_dir, 'data/20130502/')
+    pop_dir = os.path.join(base_data_dir, 'data/populations/')
+    outdata_dir = os.path.join(
+        results_dir,
+        "chr{0}-{1}/output_no_sift/".format(str(c), str(pop)),
+    )
+    plots_dir = os.path.join(
+        results_dir,
+        "chr{0}-{1}/plots_no_sift/".format(str(c), str(pop)),
+    )
 
     if not os.path.exists(outdata_dir):
         os.makedirs(outdata_dir, exist_ok=True)
@@ -463,7 +470,7 @@ def run_moverlap(input_dir, siftfile, c, pop, columns=None, debug=False, proxy=N
     gene_pair_list = res.gene_pairs(mutation_index_array)
     wr.write_gene_pairs(genepairsfile, gene_pair_list)
 
-    outfn = 'chr%s-%s.tar.gz' % (c, POP)
+    outfn = os.path.join(results_dir, 'chr%s-%s.tar.gz' % (c, POP))
     # gen final output
     tar = tarfile.open(outfn, 'w:gz')
     tar.add(outdata_dir)

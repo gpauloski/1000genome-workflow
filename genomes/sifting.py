@@ -15,12 +15,12 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def sifting(inputfile, c, pfuture=None, dask=False):
+def sifting(inputfile, c, results_dir, pfuture=None, dask=False):
     tic = time.perf_counter()
     start = time.time()
 
     # unzipped = 'ALL.chr{}.vcf'.format(c)
-    final = 'sifted.SIFT.chr{}.txt'.format(c)
+    final = os.path.join(results_dir, 'sifted.SIFT.chr{}.txt'.format(c))
 
     rawdata = readfile(inputfile)
 
