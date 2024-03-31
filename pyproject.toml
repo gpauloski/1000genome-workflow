@@ -1,16 +1,18 @@
 [project]
-name = "1000genomes"
+name = "genomes"
 description = "1000genomes with Globus Compute"
 version = "0.0.1a"
 authors = [
     { name = "Valerie Hayot-Sasson", email = "vhayot@uchicago.edu"    },
 ]
 dependencies = [
-    "proxystore",
+    "proxystore[redis]",
     "globus-compute-sdk",
+    "globus-compute-endpoint",
     "numpy",
     "matplotlib",
-    "pandas"
+    "pandas",
+    "dask[distributed]",
 ]
 
 [build-system]

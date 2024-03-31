@@ -10,7 +10,7 @@ import pandas as pd
 import pickle
 import threading
 
-from bin.utils import Bench
+from genomes.utils import Bench
 
 
 def compress(output, input_dir):

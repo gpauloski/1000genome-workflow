@@ -27,7 +27,7 @@ import threading
 
 from io import StringIO
 
-from bin.utils import Bench
+from genomes.utils import Bench
 
 SIFT = 'NO-SIFT'
 n_runs = 1

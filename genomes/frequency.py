@@ -28,7 +28,7 @@ from matplotlib import pyplot
 import matplotlib as mpl
 from io import StringIO
 
-from bin.utils import Bench
+from genomes.utils import Bench
 
 SIFT = 'NO-SIFT'
 

@@ -8,7 +8,7 @@ import subprocess
 import pandas as pd
 import threading
 
-from bin.utils import Bench
+from genomes.utils import Bench
 
 def readfile(file):
     with open(file, 'r') as f:
