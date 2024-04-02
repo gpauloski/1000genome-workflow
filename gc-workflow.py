@@ -4,14 +4,14 @@ import argparse
 import csv
 import os
 import sys
+import threading
+import time
 import pandas as pd
 import matplotlib.pyplot as plt
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import Future as ComputeFuture
 from typing import Sequence
-
-from time import perf_counter
 
 from proxystore.connectors.file import FileConnector
 from proxystore.store import Store
@@ -74,6 +74,7 @@ class Workflow:
 
 def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
     benchmarks: list[Bench] = []
+    individuals_files = {}
 
     with open(cfg.datafile, "r") as f:
         for row in csv.reader(f):
@@ -126,12 +127,33 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
 
                 counter = counter + step
 
+            output_fns = {}
             for fut in future_chrn_df:
-                if individuals_filename not in cfg.output_fns:
-                    cfg.output_fns[individuals_filename] = []
-                cfg.output_fns[individuals_filename].append(fut)
+                if individuals_filename not in output_fns:
+                    output_fns[individuals_filename] = []
+                output_fns[individuals_filename].append(fut)
 
             print("Completed individuals job")
+
+            merge_start = time.perf_counter()
+            # merge task
+            print("Merging results")
+            for key, futures in output_fns.items():
+                for future in futures:
+                    bench, results = future.result()
+                    benchmarks.append(bench)
+                    for name, df in results:
+                        if key in individuals_files:
+                            if name in individuals_files[key]:
+                                individuals_files[key][name].append(df)
+                            else:
+                                individuals_files[key][name] = [df]
+                        else:
+                            individuals_files[key] = {name: [df]}
+            merge_end = time.perf_counter()
+            benchmarks.append(
+                Bench(threading.get_native_id(), "merge", merge_start, merge_end, merge_end - merge_start)
+            )
 
             # Sifting Job
             f_sifting = row[2]
@@ -146,22 +168,6 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
             cfg.sifted_files.append(f_sifted)
 
             print("Completed sifting")
-
-        # merge task
-        print("Merging results")
-        individuals_files = {}
-        for key, futures in cfg.output_fns.items():
-            for future in futures:
-                bench, results = future.result()
-                benchmarks.append(bench)
-                for name, df in results:
-                    if key in individuals_files:
-                        if name in individuals_files[key]:
-                            individuals_files[key][name].append(df)
-                        else:
-                            individuals_files[key][name] = [df]
-                    else:
-                        individuals_files[key] = {name: [df]}
 
     cfg.sifted_files = [s.result() for s in cfg.sifted_files]
     benchmarks.extend([s[0] for s in cfg.sifted_files])
@@ -206,6 +212,7 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
 
 def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[Bench]:
     benchmarks: list[Bench] = []
+    individuals_files = {}
 
     with open(cfg.datafile, "r") as f:
         for row in csv.reader(f):
@@ -292,9 +299,9 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
 
             print("Completed sifting")
 
+        merge_start = time.perf_counter()
         # merge task
         print("Merging results")
-        individuals_files = {}
         for key, proxy in cfg.output_fns.items():
             for val in proxy:
                 for name, df in val:
@@ -305,6 +312,10 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                             individuals_files[key][name] = [df]
                     else:
                         individuals_files[key] = {name: [df]}
+        merge_end = time.perf_counter()
+        benchmarks.append(
+            Bench(threading.get_native_id(), "merge", merge_start, merge_end, merge_end - merge_start)
+        )
 
     # Analyses jobs
     mutations = []
@@ -391,7 +402,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         fraction=args.fraction,
     )
 
-    tic = perf_counter()
+    tic = time.perf_counter()
 
     store = Store("genome-store", FileConnector("/tmp/proxystore-cache"))
 
@@ -415,7 +426,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     store.close()
 
-    duration = perf_counter() - tic
+    duration = time.perf_counter() - tic
     print(
         f"Workflow completed in {duration:.3f} (executor={args.executor}, "
         f"proxystore={args.proxystore})"
