@@ -135,7 +135,7 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
 
             print("Completed individuals job")
 
-            merge_start = time.perf_counter()
+            merge_start = time.time()
             # merge task
             print("Merging results")
             for key, futures in output_fns.items():
@@ -150,7 +150,7 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                                 individuals_files[key][name] = [df]
                         else:
                             individuals_files[key] = {name: [df]}
-            merge_end = time.perf_counter()
+            merge_end = time.time()
             benchmarks.append(
                 Bench(threading.get_native_id(), "merge", merge_start, merge_end, merge_end - merge_start)
             )
@@ -299,7 +299,7 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
 
             print("Completed sifting")
 
-        merge_start = time.perf_counter()
+        merge_start = time.time()
         # merge task
         print("Merging results")
         for key, proxy in cfg.output_fns.items():
@@ -312,7 +312,7 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                             individuals_files[key][name] = [df]
                     else:
                         individuals_files[key] = {name: [df]}
-        merge_end = time.perf_counter()
+        merge_end = time.time()
         benchmarks.append(
             Bench(threading.get_native_id(), "merge", merge_start, merge_end, merge_end - merge_start)
         )
