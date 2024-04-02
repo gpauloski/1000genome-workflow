@@ -52,7 +52,6 @@ class Workflow:
     sifted_files: list
     output_fns: dict
     populations: list[str]
-    debug: bool
     fraction: float
 
     def __init__(
@@ -60,12 +59,10 @@ class Workflow:
         data_dir: str,
         results_dir: str,
         ind_jobs: int = 1,
-        debug: bool = False,
         fraction: float = 1.0,
     ) -> None:
         self.data_dir = data_dir
         self.results_dir = results_dir
-        self.debug = debug
         self.fraction = fraction
         self.ind_jobs = ind_jobs
 
@@ -95,10 +92,6 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                     f"{threshold}."
                 )
 
-            counter = 1
-
-            output_files = []
-
             # Individuals Jobs
             f_individuals = base_file
             base_file_path = os.path.join(
@@ -109,19 +102,17 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
             c_num = c_num[0 : c_num.find(".")]
             cfg.c_nums.append(c_num)
 
-            if cfg.debug:
-                cfg.c_nums = [1, 2]
-                threshold = 2
-
             individuals_filename = "chr%sn" % c_num
 
+            print(f'Processing individual: {individuals_filename}')
+            future_chrn_df = []
+
+            counter = 1
             while counter < threshold:
                 stop = counter + step
 
-                out_name = os.path.join("chr%sn-%s-%s.tar.gz" % (c_num, counter, stop))
-                output_files.append(out_name)
-
-                f_chrom_parts = executor.submit(
+                print(f'Submitting parts: {counter} - {stop}')
+                task_future = executor.submit(
                     processing_chrom_parts,
                     inputfile=base_file_path,
                     columnfile=os.path.join(
@@ -133,47 +124,19 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                     total=threshold,
                     results_dir=cfg.results_dir,
                 )
-
-                chrom_parts = f_chrom_parts.result()
-                chrom_bench = chrom_parts[0]
-                benchmarks.append(chrom_bench)
-
-                # print(f_chrom_parts)
-                print("Done obtaining chromosome parts")
-                future_chrn_df = []
-                f_chrn_bench = []
-                chrp_elements = chrom_parts[1][2]
-
-                if cfg.debug:
-                    chrp_elements = chrp_elements[0:5]
-
-                futures = []
-                for chrp in chrp_elements:
-                    f_chrn_df = executor.submit(
-                        processing_2,
-                        chrp_element=chrp,
-                        data=chrom_parts[1][0],
-                        ndir=chrom_parts[1][1],
-                        c=c_num,
-                        results_dir=cfg.results_dir,
-                    )
-
-                    futures.append(f_chrn_df)
-
-                for fut in futures:
-                    res = fut.result()
-                    future_chrn_df.append(res[1])
-                    f_chrn_bench.append(res[0])
-
-                benchmarks.extend(f_chrn_bench)
-
-                for fut in future_chrn_df:
-                    if individuals_filename in cfg.output_fns:
-                        cfg.output_fns[individuals_filename].append(fut)
-                    else:
-                        cfg.output_fns[individuals_filename] = [fut]
+                future_chrn_df.append(task_future)
 
                 counter = counter + step
+
+            for fut in future_chrn_df:
+                bench, results = fut.result()
+                benchmarks.append(bench)
+                if individuals_filename in cfg.output_fns:
+                    cfg.output_fns[individuals_filename].extend(results)
+                else:
+                    cfg.output_fns[individuals_filename] = results
+        
+            print('Completed individuals job')
 
             # Sifting Job
             f_sifting = row[2]
@@ -187,17 +150,20 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
 
             cfg.sifted_files.append(f_sifted)
 
+            print('Completed sifting')
+
         # merge task
+        print("Merging results")
         individuals_files = {}
         for key, val in cfg.output_fns.items():
-            for data in val:
+            for name, df in val:
                 if key in individuals_files:
-                    if data[0] in individuals_files[key]:
-                        individuals_files[key][data[0]].append(data[1])
+                    if name in individuals_files[key]:
+                        individuals_files[key][name].append(df)
                     else:
-                        individuals_files[key][data[0]] = [data[1]]
+                        individuals_files[key][name] = [df]
                 else:
-                    individuals_files[key] = {data[0]: [data[1]]}
+                    individuals_files[key] = {name: [df]}
 
     cfg.sifted_files = [s.result() for s in cfg.sifted_files]
     benchmarks.extend([s[0] for s in cfg.sifted_files])
@@ -207,10 +173,7 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
     mutations = []
     frequencies = []
 
-    if cfg.debug:
-        individuals_files = list(individuals_files.items())[0:2]
-    else:
-        individuals_files = individuals_files.items()
+    individuals_files = individuals_files.items()
 
     for i, inf in enumerate(individuals_files):
         for f_pop in cfg.populations:
@@ -223,7 +186,6 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                 results_dir=cfg.results_dir,
                 columns=cfg.columns,
                 pop=f_pop,
-                debug=cfg.debug,
             )
             mutations.append(mutation_res)
 
@@ -236,7 +198,6 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                 results_dir=cfg.results_dir,
                 columns=cfg.columns,
                 pop=f_pop,
-                debug=cfg.debug,
             )
             frequencies.append(frequency_res)
 
@@ -263,10 +224,6 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                     f"{threshold}."
                 )
 
-            counter = 1
-
-            output_files = []
-
             # Individuals Jobs
             f_individuals = base_file
             base_file_path = os.path.join(
@@ -277,23 +234,19 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
             c_num = c_num[0 : c_num.find(".")]
             cfg.c_nums.append(c_num)
 
-            if cfg.debug:
-                cfg.c_nums = [1, 2]
-                threshold = 2
-
             individuals_filename = "chr%sn" % c_num
+            print(f'Processing individual {individuals_filename}')
+            future_chrn_df = []
 
+            counter = 1
             while counter < threshold:
                 stop = counter + step
 
-                out_name = os.path.join("chr%sn-%s-%s.tar.gz" % (c_num, counter, stop))
-                output_files.append(out_name)
-                chrp_data_future: ProxyFuture[tuple] = store.future(
-                    polling_interval=0.001
-                )
+                print(f'Submitting parts: {counter} - {stop}')
+
                 data_future: ProxyFuture[...] = store.future(polling_interval=0.001)
 
-                chrom_bench = executor.submit(
+                task_future = executor.submit(
                     processing_chrom_parts,
                     inputfile=base_file_path,
                     columnfile=os.path.join(
@@ -304,48 +257,17 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                     stop=stop,
                     total=threshold,
                     results_dir=cfg.results_dir,
-                    chrp_data_future=chrp_data_future,
                     data_future=data_future,
                 )
-
-                ndir, chrp_elements = chrp_data_future.result()
-                benchmarks.append(chrom_bench.result())
-
-                print("Done obtaining chromosome parts")
-                f_chrn_bench = []
-
-                if cfg.debug:
-                    chrp_elements = chrp_elements[0:5]
-
-                futures = [
-                    store.future(polling_interval=0.001)
-                    for i in range(len(chrp_elements))
-                ]
-                # pf_chrn_df: ProxyFuture[(pd.DataFrame, str)] = store.future()
-
-                for i, chrp in enumerate(chrp_elements):
-                    f_chrn_bench.append(
-                        executor.submit(
-                            processing_2,
-                            chrp_element=chrp,
-                            data=data_future.proxy(),
-                            ndir=ndir,
-                            c=c_num,
-                            results_dir=cfg.results_dir,
-                            pfuture=futures[i],
-                        )
-                    )
-
-                    name = f'chr{c_num}.{chrp["name"]}'
-                    if individuals_filename not in cfg.output_fns:
-                        cfg.output_fns[individuals_filename] = []
-                    cfg.output_fns[individuals_filename].append(
-                        (name, futures[i].proxy())
-                    )
-
-                benchmarks.extend(f_chrn_bench)
-
+                benchmarks.append(task_future)
+                future_chrn_df.append(data_future.proxy())
+                
                 counter = counter + step
+
+            for fut in future_chrn_df:
+                if individuals_filename not in cfg.output_fns:
+                    cfg.output_fns[individuals_filename] = []
+                cfg.output_fns[individuals_filename].extend(fut)
 
             # Sifting Job
             f_sifting = row[2]
@@ -364,30 +286,29 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
 
             cfg.sifted_files.append(pf_sifting.proxy())
             benchmarks.append(f_sifted)
+            print('Completed sifting')
 
         # merge task
         print("Merging results")
         individuals_files = {}
-        for key, val in cfg.output_fns.items():
-            for name, data_proxy in val:
+        for key, data_proxy in cfg.output_fns.items():
+            for name, df in data_proxy:
                 if key in individuals_files:
                     if name in individuals_files[key]:
-                        individuals_files[key][name].append(data_proxy)
+                        individuals_files[key][name].append(df)
                     else:
-                        individuals_files[key][name] = [data_proxy]
+                        individuals_files[key][name] = [df]
                 else:
-                    individuals_files[key] = {name: [data_proxy]}
+                    individuals_files[key] = {name: [df]}
 
+    benchmarks = [b.result() for b in benchmarks]
     print("Sifting completed")
 
     # Analyses jobs
     mutations = []
     frequencies = []
 
-    if cfg.debug:
-        individuals_files = list(individuals_files.items())[0:2]
-    else:
-        individuals_files = individuals_files.items()
+    individuals_files = individuals_files.items()
 
     for i, inf in enumerate(individuals_files):
         for f_pop in cfg.populations:
@@ -396,9 +317,10 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                 input_dir=inf[1],
                 siftfile=cfg.sifted_files[i],
                 c=cfg.c_nums[i],
+                data_dir=cfg.data_dir,
+                results_dir=cfg.results_dir,
                 columns=cfg.columns,
                 pop=f_pop,
-                debug=cfg.debug,
             )
             mutations.append(mutation_res)
 
@@ -407,9 +329,10 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                 input_dir=inf[1],
                 siftfile=cfg.sifted_files[i],
                 c=cfg.c_nums[i],
+                data_dir=cfg.data_dir,
+                results_dir=cfg.results_dir,
                 columns=cfg.columns,
                 pop=f_pop,
-                debug=cfg.debug,
             )
             frequencies.append(frequency_res)
 
@@ -437,10 +360,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
     )
     parser.add_argument(
-        "--debug",
-        action="store_true",
-    )
-    parser.add_argument(
         "--endpoint",
         help="Globus Compute Endpoint UUID",
     )
@@ -455,13 +374,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=16,
         type=int,
     )
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+    )
+    parser.add_argument(
+        '--workers',
+        type=int,
+    )
     args = parser.parse_args()
 
     w = Workflow(
         data_dir=args.data_dir,
         results_dir=args.results_dir,
         ind_jobs=args.ind_jobs,
-        debug=args.debug,
         fraction=args.fraction,
     )
 
@@ -470,13 +396,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     store = Store("genome-store", FileConnector("/tmp/proxystore-cache"))
 
     if args.executor == "globus-compute":
-        with Executor(endpoint_id=args.endpoint) as gce:
+        with Executor(endpoint_id=args.endpoint, batch_size=8) as gce:
             if args.proxystore:
                 benchmarks = run_proxy_workflow(w, executor=gce, store=store)
             else:
                 benchmarks = run_gc_workflow(w, executor=gce)
     elif args.executor == "process-pool":
-        with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as pool:
+        workers = args.workers if args.workers is not None else multiprocessing.cpu_count()
+        with ProcessPoolExecutor(max_workers=workers) as pool:
             if args.proxystore:
                 benchmarks = run_proxy_workflow(w, executor=pool, store=store)
             else:
@@ -489,19 +416,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     duration = perf_counter() - tic
     print(
         f"Workflow completed in {duration:.3f} (executor={args.executor}, "
-        f"proxystore={args.proxystore}, debug={args.debug})"
+        f"proxystore={args.proxystore})"
     )
 
     name = args.executor
     if args.proxystore:
         name += "-proxystore"
-    if args.debug:
-        name += "-debug"
 
     df = process_benchmarks(benchmarks)
     df.to_pickle(f"{name}.pkl")
 
-    if args.debug:
+    if args.plot:
         plt.barh(
             y=df["thread_id"],
             width=df["duration"],

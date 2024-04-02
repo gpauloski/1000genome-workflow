@@ -22,7 +22,7 @@ def readfile(file):
         content = f.readlines()
     return content
 
-def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, results_dir, chrp_data_future=None, data_future=None, dask=False):
+def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, results_dir, data_future=None):
     print('= Now processing chromosome: {}'.format(c))
     tic = time.perf_counter()
     start = time.time()
@@ -72,32 +72,37 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, resul
         col = i + start_data
         name = columndata[col]
 
-        filename = "{}/chr{}.{}".format(ndir, c, name)
         chrp_data.append({ 'name': name, 'col': col})
-    
-    outname = f"{inputfile}.pkl"
 
-    if chrp_data_future is None and not dask:
-        with open(outname, 'wb+') as of:
-            pickle.dump(data, of) 
-    elif chrp_data_future is not None:
-        chrp_data_future.set_result((ndir, chrp_data))
-        # We could call this earlier, but it doesn't matter because the client
-        # has to block on chrp_data_future first.
-        data_future.set_result(data)
-        
+    # Either: list of dataframes or list of paths to pickled dataframes
+    results = []
+    for chrp in chrp_data:
+        df = processing_2(
+            chrp_element=chrp,
+            data=data,
+            ndir=ndir,
+            c=c,
+            results_dir=results_dir,
+        )
+
+        if data_future is None:      
+            name = f"chr{c}.{chrp['name']}"
+            op = os.path.join(results_dir, ndir, name)
+            df.to_pickle(op)
+            results.append((name, op))
+        else:
+            results.append((name, df))
+
     end = time.time()
     duration = time.perf_counter() - tic
 
-    benchmark = Bench(threading.get_native_id() ,'processing_chrom_parts', start, end, duration)
+    benchmark = Bench(threading.get_native_id(), 'individuals', start, end, duration)
 
-    if chrp_data_future is not None:
+    if data_future is not None:
+        data_future.set_result(results)
         return benchmark
-    elif dask:
-        return (benchmark, (data, ndir, chrp_data))
-
-    return (benchmark,(outname, ndir, chrp_data))
-        
+    else:
+        return (benchmark, results) 
     
 
 def processing_2(
@@ -106,18 +111,12 @@ def processing_2(
     ndir,
     c,
     results_dir: str,
-    pfuture = None,
-    dask=False,
 ):
     tic = time.perf_counter()
     start = time.time()
 
     col = chrp_element['col']
     name = chrp_element['name']
-
-    if pfuture is None and not dask:
-        with open(data, 'rb') as f:
-            data = pickle.load(f)
 
     df = pd.DataFrame(columns=['ndir', 'chr', 'data'])
     count = 0
@@ -155,30 +154,7 @@ def processing_2(
         except ValueError:
             continue
 
-    name = f"chr{c}.{name}"
-
-    op = os.path.join(results_dir, ndir, name)
-
-    if pfuture is None and not dask:
-        df.to_pickle(op)
-    elif pfuture is not None:
-        pfuture.set_result(df)
-
-    duration = time.perf_counter() - tic
-    end = time.time()
-
-    benchmark = Bench(threading.get_native_id(), 'processing_2', start, end, duration)
-    if pfuture is not None:
-        return benchmark
-    elif dask:
-        return (benchmark, (name, df.to_csv()))
-        
-    return (benchmark,( name, op ))
-    # print("processed in {:0.2f} sec".format(time.perf_counter()-tic_iter))
-
-    #outputfile = "chr{}n-{}-{}.tar.gz".format(c, counter, stop)
-    # print("== Done. Zipping {} files into {}.".format(end_data, outputfile))
-
+    return df
     
     
 def processing(inputfile, columnfile, c, counter, stop, total):
