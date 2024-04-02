@@ -15,11 +15,9 @@ from time import perf_counter
 
 from proxystore.connectors.file import FileConnector
 from proxystore.store import Store
-from proxystore.store.future import ProxyFuture
 
 from globus_compute_sdk import Executor
 
-from genomes.individuals import processing_2
 from genomes.individuals import processing_chrom_parts
 from genomes.sifting import sifting
 from genomes.mutation_overlap import run_moverlap
@@ -104,14 +102,14 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
 
             individuals_filename = "chr%sn" % c_num
 
-            print(f'Processing individual: {individuals_filename}')
+            print(f"Processing individual: {individuals_filename}")
             future_chrn_df = []
 
             counter = 1
             while counter < threshold:
                 stop = counter + step
 
-                print(f'Submitting parts: {counter} - {stop}')
+                print(f"Submitting parts: {counter} - {stop}")
                 task_future = executor.submit(
                     processing_chrom_parts,
                     inputfile=base_file_path,
@@ -132,8 +130,8 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                 if individuals_filename not in cfg.output_fns:
                     cfg.output_fns[individuals_filename] = []
                 cfg.output_fns[individuals_filename].append(fut)
-        
-            print('Completed individuals job')
+
+            print("Completed individuals job")
 
             # Sifting Job
             f_sifting = row[2]
@@ -147,7 +145,7 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
 
             cfg.sifted_files.append(f_sifted)
 
-            print('Completed sifting')
+            print("Completed sifting")
 
         # merge task
         print("Merging results")
@@ -156,7 +154,7 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
             for future in futures:
                 bench, results = future.result()
                 benchmarks.append(bench)
-                for name, df in results: 
+                for name, df in results:
                     if key in individuals_files:
                         if name in individuals_files[key]:
                             individuals_files[key][name].append(df)
@@ -236,7 +234,7 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
 
             individuals_filename = "chr%sn" % c_num
 
-            print(f'Processing individual: {individuals_filename}')
+            print(f"Processing individual: {individuals_filename}")
             individual_task_futures = []
             individual_data_futures = []
 
@@ -244,7 +242,7 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
             while counter < threshold:
                 stop = counter + step
 
-                print(f'Submitting parts: {counter} - {stop}')
+                print(f"Submitting parts: {counter} - {stop}")
                 data_future = store.future(polling_interval=0.001)
                 task_future = executor.submit(
                     processing_chrom_parts,
@@ -269,10 +267,10 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                 if individuals_filename not in cfg.output_fns:
                     cfg.output_fns[individuals_filename] = []
                 cfg.output_fns[individuals_filename].append(data)
-       
+
             benchmarks.extend(individual_task_futures)
 
-            print('Completed individuals job')
+            print("Completed individuals job")
 
             # Sifting Job
             f_sifting = row[2]
@@ -292,7 +290,7 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
             cfg.sifted_files.append(data_future.proxy())
             benchmarks.append(task_future)
 
-            print('Completed sifting')
+            print("Completed sifting")
 
         # merge task
         print("Merging results")
@@ -381,7 +379,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
     )
     parser.add_argument(
-        '--workers',
+        "--workers",
         type=int,
     )
     args = parser.parse_args()
@@ -404,7 +402,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             else:
                 benchmarks = run_gc_workflow(w, executor=gce)
     elif args.executor == "process-pool":
-        workers = args.workers if args.workers is not None else multiprocessing.cpu_count()
+        workers = (
+            args.workers if args.workers is not None else multiprocessing.cpu_count()
+        )
         with ProcessPoolExecutor(max_workers=workers) as pool:
             if args.proxystore:
                 benchmarks = run_proxy_workflow(w, executor=pool, store=store)

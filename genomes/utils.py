@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 
+
 @dataclass
-class Bench():
+class Bench:
     thread_id: int
     task: str
     start: int

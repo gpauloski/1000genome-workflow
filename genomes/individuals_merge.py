@@ -12,25 +12,29 @@ def compress(archive, input_dir):
     with tarfile.open(archive, "w:gz") as f:
         f.add(input_dir, arcname="")
 
+
 def extract_all(archive, output_dir):
     with tarfile.open(archive, "r:*") as f:
         f.extractall(os.path.basename(output_dir))
         flist = f.getnames()
-        if flist[0] == '':
+        if flist[0] == "":
             flist = flist[1:]
         return flist
 
+
 def readfile(filename):
-    with open(filename, 'r') as f:
+    with open(filename, "r") as f:
         content = f.readlines()
     return content
 
+
 def writefile(filename, content):
-    with open(filename, 'w') as f:
+    with open(filename, "w") as f:
         f.writelines(content)
 
+
 def merging(c, tar_files):
-    print('= Merging chromosome {}...'.format(c))
+    print("= Merging chromosome {}...".format(c))
     tic = time.perf_counter()
 
     merged_dir = "merged_chr{}".format(c)
@@ -48,11 +52,11 @@ def merging(c, tar_files):
                 else:
                     data[filename] = content
 
-        print("Merged {} in {:0.2f} sec".format(tar, time.perf_counter()-tic_iter))
-    
-    for filename,content in data.items():
+        print("Merged {} in {:0.2f} sec".format(tar, time.perf_counter() - tic_iter))
+
+    for filename, content in data.items():
         writefile(os.path.join(merged_dir, filename), content)
-    
+
     outputfile = "chr{}n.tar.gz".format(c)
     print("== Done. Zipping {} files into {}.".format(len(data), outputfile))
 
@@ -64,8 +68,11 @@ def merging(c, tar_files):
     except OSError as e:
         print("Error: %s : %s" % (merged_dir, e.strerror))
 
-    print("= Chromosome {} merged in {:0.2f} seconds.".format(
-        c, time.perf_counter() - tic))
+    print(
+        "= Chromosome {} merged in {:0.2f} seconds.".format(
+            c, time.perf_counter() - tic
+        )
+    )
 
 
 if __name__ == "__main__":
