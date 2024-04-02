@@ -80,13 +80,13 @@ def sifting(inputfile, c, results_dir, data_future=None, dask=False):
         else:
             df.loc[i] = [temp[0], temp[1], temp[2], temp[4], temp[6]]
     
-    # if data_future is None and not dask:
-    #     df.to_pickle(final)
-    # elif data_future is not None:
-    #     data_future.set_result(df)
-    df.to_pickle(final)
-    if data_future is not None:
-        data_future.set_result(final)
+    if data_future is None and not dask:
+        df.to_pickle(final)
+    elif data_future is not None:
+        data_future.set_result(df)
+    # df.to_pickle(final)
+    # if data_future is not None:
+    #     data_future.set_result(final)
 
     print("= Line, id, ENSG id, SIFT, and phenotype printed to {} in {:0.2f} seconds.".format(final, time.perf_counter() - tic))
 

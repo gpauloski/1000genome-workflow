@@ -308,9 +308,6 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                     else:
                         individuals_files[key] = {name: [df]}
 
-    benchmarks = [b.result() if isinstance(b, ComputeFuture) else b for b in benchmarks]
-    print('Done merging')
-
     # Analyses jobs
     mutations = []
     frequencies = []
