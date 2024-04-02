@@ -129,12 +129,9 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                 counter = counter + step
 
             for fut in future_chrn_df:
-                bench, results = fut.result()
-                benchmarks.append(bench)
-                if individuals_filename in cfg.output_fns:
-                    cfg.output_fns[individuals_filename].extend(results)
-                else:
-                    cfg.output_fns[individuals_filename] = results
+                if individuals_filename not in cfg.output_fns:
+                    cfg.output_fns[individuals_filename] = []
+                cfg.output_fns[individuals_filename].append(fut)
         
             print('Completed individuals job')
 
@@ -155,15 +152,18 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
         # merge task
         print("Merging results")
         individuals_files = {}
-        for key, val in cfg.output_fns.items():
-            for name, df in val:
-                if key in individuals_files:
-                    if name in individuals_files[key]:
-                        individuals_files[key][name].append(df)
+        for key, futures in cfg.output_fns.items():
+            for future in futures:
+                bench, results = future.result()
+                benchmarks.append(bench)
+                for name, df in results: 
+                    if key in individuals_files:
+                        if name in individuals_files[key]:
+                            individuals_files[key][name].append(df)
+                        else:
+                            individuals_files[key][name] = [df]
                     else:
-                        individuals_files[key][name] = [df]
-                else:
-                    individuals_files[key] = {name: [df]}
+                        individuals_files[key] = {name: [df]}
 
     cfg.sifted_files = [s.result() for s in cfg.sifted_files]
     benchmarks.extend([s[0] for s in cfg.sifted_files])
@@ -235,17 +235,17 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
             cfg.c_nums.append(c_num)
 
             individuals_filename = "chr%sn" % c_num
-            print(f'Processing individual {individuals_filename}')
-            future_chrn_df = []
+
+            print(f'Processing individual: {individuals_filename}')
+            individual_task_futures = []
+            individual_data_futures = []
 
             counter = 1
             while counter < threshold:
                 stop = counter + step
 
                 print(f'Submitting parts: {counter} - {stop}')
-
-                data_future: ProxyFuture[...] = store.future(polling_interval=0.001)
-
+                data_future = store.future(polling_interval=0.001)
                 task_future = executor.submit(
                     processing_chrom_parts,
                     inputfile=base_file_path,
@@ -259,15 +259,20 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                     results_dir=cfg.results_dir,
                     data_future=data_future,
                 )
-                benchmarks.append(task_future)
-                future_chrn_df.append(data_future.proxy())
-                
+                individual_task_futures.append(task_future)
+                individual_data_futures.append(data_future)
+
                 counter = counter + step
 
-            for fut in future_chrn_df:
+            for data_future in individual_data_futures:
+                data = data_future.proxy()
                 if individuals_filename not in cfg.output_fns:
                     cfg.output_fns[individuals_filename] = []
-                cfg.output_fns[individuals_filename].extend(fut)
+                cfg.output_fns[individuals_filename].append(data)
+       
+            benchmarks.extend(individual_task_futures)
+
+            print('Completed individuals job')
 
             # Sifting Job
             f_sifting = row[2]
@@ -275,34 +280,36 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                 cfg.data_dir, "data", cfg.dataset, "sifting", f_sifting
             )
 
-            pf_sifting = store.future(polling_interval=0.001)
-            f_sifted = executor.submit(
+            data_future = store.future(polling_interval=0.001)
+            task_future = executor.submit(
                 sifting,
                 inputfile=f_sifting,
                 c=c_num,
                 results_dir=cfg.results_dir,
-                pfuture=pf_sifting,
+                data_future=data_future,
             )
 
-            cfg.sifted_files.append(pf_sifting.proxy())
-            benchmarks.append(f_sifted)
+            cfg.sifted_files.append(data_future.proxy())
+            benchmarks.append(task_future)
+
             print('Completed sifting')
 
         # merge task
         print("Merging results")
         individuals_files = {}
-        for key, data_proxy in cfg.output_fns.items():
-            for name, df in data_proxy:
-                if key in individuals_files:
-                    if name in individuals_files[key]:
-                        individuals_files[key][name].append(df)
+        for key, proxy in cfg.output_fns.items():
+            for val in proxy:
+                for name, df in val:
+                    if key in individuals_files:
+                        if name in individuals_files[key]:
+                            individuals_files[key][name].append(df)
+                        else:
+                            individuals_files[key][name] = [df]
                     else:
-                        individuals_files[key][name] = [df]
-                else:
-                    individuals_files[key] = {name: [df]}
+                        individuals_files[key] = {name: [df]}
 
-    benchmarks = [b.result() for b in benchmarks]
-    print("Sifting completed")
+    benchmarks = [b.result() if isinstance(b, ComputeFuture) else b for b in benchmarks]
+    print('Done merging')
 
     # Analyses jobs
     mutations = []
@@ -338,9 +345,7 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
 
     benchmarks = [b.result() if isinstance(b, ComputeFuture) else b for b in benchmarks]
     benchmarks.extend([m.result() for m in mutations])
-    print("Collected mutations")
     benchmarks.extend([freq.result() for freq in frequencies])
-    print("Collected frequencies")
     return benchmarks
 
 

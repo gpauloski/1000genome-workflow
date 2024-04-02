@@ -85,13 +85,17 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, resul
             results_dir=results_dir,
         )
 
-        if data_future is None:      
-            name = f"chr{c}.{chrp['name']}"
-            op = os.path.join(results_dir, ndir, name)
-            df.to_pickle(op)
-            results.append((name, op))
-        else:
-            results.append((name, df))
+        # if data_future is None:      
+        name = f"chr{c}.{chrp['name']}"
+        op = os.path.join(results_dir, ndir, name)
+        df.to_pickle(op)
+        results.append((name, op))
+        # else:
+        #     results.append((name, df))
+        #     results.append((name, df))
+    
+    if data_future is not None:
+        data_future.set_result(results)
 
     end = time.time()
     duration = time.perf_counter() - tic
@@ -99,7 +103,6 @@ def processing_chrom_parts(inputfile, columnfile, c, counter, stop, total, resul
     benchmark = Bench(threading.get_native_id(), 'individuals', start, end, duration)
 
     if data_future is not None:
-        data_future.set_result(results)
         return benchmark
     else:
         return (benchmark, results) 

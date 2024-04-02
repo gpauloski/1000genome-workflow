@@ -30,6 +30,8 @@ from io import StringIO
 
 from genomes.utils import Bench
 
+from proxystore.proxy import extract, Proxy
+
 SIFT = 'NO-SIFT'
 
 class ReadData:
@@ -308,6 +310,8 @@ def run_frequency(input_dir, siftfile, c, pop, data_dir, results_dir, columns=No
     ids = rd.read_names(POP)
     n_pairs = len(ids) / 2
 
+    if isinstance(siftfile, Proxy):
+        siftfile = extract(siftfile)
     rs_numbers, map_variations = rd.read_rs_numbers(siftfile)
     mutation_index_array = rd.read_individuals(ids, rs_numbers)
 

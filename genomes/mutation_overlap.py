@@ -29,6 +29,8 @@ from io import StringIO
 
 from genomes.utils import Bench
 
+from proxystore.proxy import extract, Proxy
+
 SIFT = 'NO-SIFT'
 n_runs = 1
 
@@ -442,6 +444,8 @@ def run_moverlap(input_dir, siftfile, c, pop, data_dir, results_dir, columns=Non
     ids = rd.read_names(POP)
     n_pairs = len(ids)/2
 
+    if isinstance(siftfile, Proxy):
+        siftfile = extract(siftfile)
     rs_numbers, map_variations = rd.read_rs_numbers(siftfile)
     mutation_index_array, total_mutations, total_mutations_list = rd.read_individuals(ids, rs_numbers)
     wr.write_total_indiv(total_mutations_filename, total_mutations)
