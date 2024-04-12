@@ -7,7 +7,6 @@ import sys
 import threading
 import time
 import pandas as pd
-import matplotlib.pyplot as plt
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import Future as ComputeFuture
@@ -27,14 +26,6 @@ from genomes.utils import Bench
 
 def process_benchmarks(benchmarks):
     df = pd.DataFrame(benchmarks)
-    colours = {
-        "processing_chrom_parts": "b",
-        "processing_2": "r",
-        "sifting": "m",
-        "mutation_overlap": "y",
-        "frequency": "g",
-    }
-    df["colour"] = df["task"].map(colours)
     df["norm_start"] = df["start"] - df["start"].min()
     return df
 
@@ -386,10 +377,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=int,
     )
     parser.add_argument(
-        "--plot",
-        action="store_true",
-    )
-    parser.add_argument(
         "--workers",
         type=int,
     )
@@ -437,17 +424,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         name += "-proxystore"
 
     df = process_benchmarks(benchmarks)
-    df.to_pickle(f"{name}.pkl")
-
-    if args.plot:
-        plt.barh(
-            y=df["thread_id"],
-            width=df["duration"],
-            left=df["norm_start"],
-            color=df["colour"],
-        )
-        plt.savefig(f"{name}.pdf")
-
+    df['name'] = name
+    filepath = f'run-{name}.csv'
+    df.to_csv(filepath, index=True)
+    print(f'Saved task times to {filepath}')
 
 if __name__ == "__main__":
     raise SystemExit(main())
