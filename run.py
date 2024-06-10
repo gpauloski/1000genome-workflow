@@ -2,26 +2,28 @@ from __future__ import annotations
 
 import argparse
 import csv
+import logging
+import multiprocessing
 import os
 import sys
 import threading
 import time
-import pandas as pd
-import multiprocessing
-from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import Future as ComputeFuture
+from concurrent.futures import ProcessPoolExecutor
 from typing import Sequence
 
+import pandas as pd
+from globus_compute_sdk import Executor
 from proxystore.connectors.file import FileConnector
 from proxystore.store import Store
 
-from globus_compute_sdk import Executor
-
-from genomes.individuals import processing_chrom_parts
-from genomes.sifting import sifting
-from genomes.mutation_overlap import run_moverlap
 from genomes.frequency import run_frequency
+from genomes.individuals import processing_chrom_parts
+from genomes.mutation_overlap import run_moverlap
+from genomes.sifting import sifting
 from genomes.utils import Bench
+
+logger = logging.getLogger(__name__)
 
 
 def process_benchmarks(benchmarks):
@@ -67,7 +69,7 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
     benchmarks: list[Bench] = []
     individuals_files = {}
 
-    with open(cfg.datafile, "r") as f:
+    with open(cfg.datafile) as f:
         for row in csv.reader(f):
             base_file = row[0]
             threshold = int(cfg.fraction * int(row[1]))
@@ -79,13 +81,13 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                 raise ValueError(
                     f"For file {base_file}: required individuals jobs "
                     f"{cfg.ind_jobs} does not divide the number of rows "
-                    f"{threshold}."
+                    f"{threshold}.",
                 )
 
             # Individuals Jobs
             f_individuals = base_file
             base_file_path = os.path.join(
-                cfg.data_dir, "data", cfg.dataset, f_individuals
+                cfg.data_dir, "data", cfg.dataset, f_individuals,
             )
 
             c_num = base_file[base_file.find("chr") + 3 :]
@@ -94,19 +96,19 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
 
             individuals_filename = "chr%sn" % c_num
 
-            print(f"Processing individual: {individuals_filename}")
+            logger.info(f"Processing individual: {individuals_filename}")
             future_chrn_df = []
 
             counter = 1
             while counter < threshold:
                 stop = counter + step
 
-                print(f"Submitting parts: {counter} - {stop}")
+                logger.info(f"Submitting parts: {counter} - {stop}")
                 task_future = executor.submit(
                     processing_chrom_parts,
                     inputfile=base_file_path,
                     columnfile=os.path.join(
-                        cfg.data_dir, "data", cfg.dataset, cfg.columns
+                        cfg.data_dir, "data", cfg.dataset, cfg.columns,
                     ),
                     c=c_num,
                     counter=counter,
@@ -124,11 +126,11 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                     output_fns[individuals_filename] = []
                 output_fns[individuals_filename].append(fut)
 
-            print("Completed individuals job")
+            logger.info("Completed individuals job")
 
             merge_start = time.time()
             # merge task
-            print("Merging results")
+            logger.info("Merging results")
             for key, futures in output_fns.items():
                 for future in futures:
                     bench, results = future.result()
@@ -143,26 +145,32 @@ def run_gc_workflow(cfg: Workflow, executor: Executor) -> list[Bench]:
                             individuals_files[key] = {name: [df]}
             merge_end = time.time()
             benchmarks.append(
-                Bench(threading.get_native_id(), "merge", merge_start, merge_end, merge_end - merge_start)
+                Bench(
+                    threading.get_native_id(),
+                    "merge",
+                    merge_start,
+                    merge_end,
+                    merge_end - merge_start,
+                ),
             )
 
             # Sifting Job
             f_sifting = row[2]
             f_sifting = os.path.join(
-                cfg.data_dir, "data", cfg.dataset, "sifting", f_sifting
+                cfg.data_dir, "data", cfg.dataset, "sifting", f_sifting,
             )
 
             f_sifted = executor.submit(
-                sifting, inputfile=f_sifting, c=c_num, results_dir=cfg.results_dir
+                sifting, inputfile=f_sifting, c=c_num, results_dir=cfg.results_dir,
             )
 
             cfg.sifted_files.append(f_sifted)
 
-            print("Completed sifting")
+            logger.info("Completed sifting")
 
     cfg.sifted_files = [s.result() for s in cfg.sifted_files]
     benchmarks.extend([s[0] for s in cfg.sifted_files])
-    print("Sifting completed")
+    logger.info("Sifting completed")
 
     # Analyses jobs
     mutations = []
@@ -205,7 +213,7 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
     benchmarks: list[Bench] = []
     individuals_files = {}
 
-    with open(cfg.datafile, "r") as f:
+    with open(cfg.datafile) as f:
         for row in csv.reader(f):
             base_file = row[0]
             threshold = int(cfg.fraction * int(row[1]))
@@ -217,13 +225,13 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                 raise ValueError(
                     f"For file {base_file}: required individuals jobs "
                     f"{cfg.ind_jobs} does not divide the number of rows "
-                    f"{threshold}."
+                    f"{threshold}.",
                 )
 
             # Individuals Jobs
             f_individuals = base_file
             base_file_path = os.path.join(
-                cfg.data_dir, "data", cfg.dataset, f_individuals
+                cfg.data_dir, "data", cfg.dataset, f_individuals,
             )
 
             c_num = base_file[base_file.find("chr") + 3 :]
@@ -232,7 +240,7 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
 
             individuals_filename = "chr%sn" % c_num
 
-            print(f"Processing individual: {individuals_filename}")
+            logger.info(f"Processing individual: {individuals_filename}")
             individual_task_futures = []
             individual_data_futures = []
 
@@ -240,13 +248,13 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
             while counter < threshold:
                 stop = counter + step
 
-                print(f"Submitting parts: {counter} - {stop}")
+                logger.info(f"Submitting parts: {counter} - {stop}")
                 data_future = store.future(polling_interval=0.001)
                 task_future = executor.submit(
                     processing_chrom_parts,
                     inputfile=base_file_path,
                     columnfile=os.path.join(
-                        cfg.data_dir, "data", cfg.dataset, cfg.columns
+                        cfg.data_dir, "data", cfg.dataset, cfg.columns,
                     ),
                     c=c_num,
                     counter=counter,
@@ -268,12 +276,12 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
 
             benchmarks.extend(individual_task_futures)
 
-            print("Completed individuals job")
+            logger.info("Completed individuals job")
 
             # Sifting Job
             f_sifting = row[2]
             f_sifting = os.path.join(
-                cfg.data_dir, "data", cfg.dataset, "sifting", f_sifting
+                cfg.data_dir, "data", cfg.dataset, "sifting", f_sifting,
             )
 
             data_future = store.future(polling_interval=0.001)
@@ -288,11 +296,11 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
             cfg.sifted_files.append(data_future.proxy())
             benchmarks.append(task_future)
 
-            print("Completed sifting")
+            logger.info("Completed sifting")
 
         merge_start = time.time()
         # merge task
-        print("Merging results")
+        logger.info("Merging results")
         for key, proxy in cfg.output_fns.items():
             for val in proxy:
                 for name, df in val:
@@ -305,7 +313,13 @@ def run_proxy_workflow(cfg: Workflow, executor: Executor, store: Store) -> list[
                         individuals_files[key] = {name: [df]}
         merge_end = time.time()
         benchmarks.append(
-            Bench(threading.get_native_id(), "merge", merge_start, merge_end, merge_end - merge_start)
+            Bench(
+                threading.get_native_id(),
+                "merge",
+                merge_start,
+                merge_end,
+                merge_end - merge_start,
+            ),
         )
 
     # Analyses jobs
@@ -382,6 +396,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args()
 
+    log_fmt = "[%(asctime)s.%(msecs)03d] %(levelname)-5s (%(name)s) :: %(message)s"
+    logging.basicConfig(
+        format=log_fmt,
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.INFO,
+    )
+
     w = Workflow(
         data_dir=args.data_dir,
         results_dir=args.results_dir,
@@ -414,9 +435,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     store.close()
 
     duration = time.perf_counter() - tic
-    print(
+    logger.info(
         f"Workflow completed in {duration:.3f} (executor={args.executor}, "
-        f"proxystore={args.proxystore})"
+        f"proxystore={args.proxystore})",
     )
 
     name = args.executor
@@ -424,10 +445,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         name += "-proxystore"
 
     df = process_benchmarks(benchmarks)
-    df['name'] = name
-    filepath = f'run-{name}.csv'
+    df["name"] = name
+    filepath = f"run-{name}.csv"
     df.to_csv(filepath, index=True)
-    print(f'Saved task times to {filepath}')
+    logger.info(f"Saved task times to {filepath}")
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -1,17 +1,19 @@
-#!/usr/bin/env python3
-
+import logging
 import os
-import sys
 import re
-import time
-import pandas as pd
+import sys
 import threading
+import time
+
+import pandas as pd
 
 from genomes.utils import Bench
 
+logger = logging.getLogger(__name__)
+
 
 def readfile(file):
-    with open(file, "r") as f:
+    with open(file) as f:
         content = f.readlines()
     return content
 
@@ -21,17 +23,17 @@ def sifting(inputfile, c, results_dir, data_future=None, dask=False):
     start = time.time()
 
     # unzipped = 'ALL.chr{}.vcf'.format(c)
-    final = os.path.join(results_dir, "sifted.SIFT.chr{}.txt".format(c))
+    final = os.path.join(results_dir, f"sifted.SIFT.chr{c}.txt")
 
     rawdata = readfile(inputfile)
 
-    print("= Taking columns from {}".format(inputfile))
-    print("== Filtering over {} lines".format(len(rawdata)))
+    logger.debug(f"= Taking columns from {inputfile}")
+    logger.debug(f"== Filtering over {len(rawdata)} lines")
 
     # header =$(head - n 1000 $unzipped | grep "#" | wc - l)
     r1 = re.compile(".*(#).*")
     header = len(list(filter(r1.match, rawdata[:1000])))
-    print("== Header found -> {}".format(header))
+    logger.debug(f"== Header found -> {header}")
 
     # grep -n "deleterious\|tolerated" $unzipped | grep "rs" > $siftfile
     ## This regex is super slow
@@ -48,7 +50,7 @@ def sifting(inputfile, c, results_dir, data_future=None, dask=False):
     # for lineno,content in enumerate(rawdata[header:]):
     #     if r2.search(content):
     #         data_temp.append(str(lineno)+':'+content)
-    #     print('{}/{}'.format(lineno, init_size), end='\r')
+    #     logger.debug('{}/{}'.format(lineno, init_size), end='\r')
 
     # siftfile = 'SIFT.chr{}.vcf'.format(c)
     # with open(siftfile, 'w') as f:
@@ -59,7 +61,7 @@ def sifting(inputfile, c, results_dir, data_future=None, dask=False):
     r3 = re.compile(".*(rs).*")
     data = list(filter(r3.match, data_temp))
 
-    print("== Starting processing {} lines".format(len(data)))
+    logger.debug(f"== Starting processing {len(data)} lines")
 
     df = pd.DataFrame(columns=["line", "id", "ENSG_id", "SIFT", "phenotype"])
 
@@ -93,10 +95,8 @@ def sifting(inputfile, c, results_dir, data_future=None, dask=False):
     # if data_future is not None:
     #     data_future.set_result(final)
 
-    print(
-        "= Line, id, ENSG id, SIFT, and phenotype printed to {} in {:0.2f} seconds.".format(
-            final, time.perf_counter() - tic
-        )
+    logger.debug(
+        f"= Line, id, ENSG id, SIFT, and phenotype printed to {final} in {time.perf_counter() - tic:0.2f} seconds.",
     )
 
     duration = time.perf_counter() - tic

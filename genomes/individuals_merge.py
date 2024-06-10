@@ -1,11 +1,12 @@
-#!/usr/bin/env python3
-
+import logging
 import os
-import sys
-import time
-import tarfile
 import shutil
+import sys
+import tarfile
 import tempfile
+import time
+
+logger = logging.getLogger(__name__)
 
 
 def compress(archive, input_dir):
@@ -23,7 +24,7 @@ def extract_all(archive, output_dir):
 
 
 def readfile(filename):
-    with open(filename, "r") as f:
+    with open(filename) as f:
         content = f.readlines()
     return content
 
@@ -34,10 +35,10 @@ def writefile(filename, content):
 
 
 def merging(c, tar_files):
-    print("= Merging chromosome {}...".format(c))
+    logger.debug(f"= Merging chromosome {c}...")
     tic = time.perf_counter()
 
-    merged_dir = "merged_chr{}".format(c)
+    merged_dir = f"merged_chr{c}"
     os.makedirs(merged_dir, exist_ok=True)
 
     data = {}
@@ -52,13 +53,15 @@ def merging(c, tar_files):
                 else:
                     data[filename] = content
 
-        print("Merged {} in {:0.2f} sec".format(tar, time.perf_counter() - tic_iter))
+        logger.debug(
+            f"Merged {tar} in {time.perf_counter() - tic_iter:0.2f} sec",
+        )
 
     for filename, content in data.items():
         writefile(os.path.join(merged_dir, filename), content)
 
-    outputfile = "chr{}n.tar.gz".format(c)
-    print("== Done. Zipping {} files into {}.".format(len(data), outputfile))
+    outputfile = f"chr{c}n.tar.gz"
+    logger.debug(f"== Done. Zipping {len(data)} files into {outputfile}.")
 
     compress(outputfile, merged_dir)
 
@@ -66,12 +69,10 @@ def merging(c, tar_files):
     try:
         shutil.rmtree(merged_dir)
     except OSError as e:
-        print("Error: %s : %s" % (merged_dir, e.strerror))
+        logger.error("Error: %s : %s" % (merged_dir, e.strerror))
 
-    print(
-        "= Chromosome {} merged in {:0.2f} seconds.".format(
-            c, time.perf_counter() - tic
-        )
+    logger.debug(
+        f"= Chromosome {c} merged in {time.perf_counter() - tic:0.2f} seconds.",
     )
 
 
