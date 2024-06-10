@@ -1,4 +1,4 @@
-# 1000Genomes Workflow
+# 1000 Genomes Workflow
 
 The 1000 genomes project provides a reference for human variation, having reconstructed the genomes of 2,504 individuals across 26 different populations to energize these approaches. This workflow identifies mutational overlaps using data from the 1000 genomes project in order to provide a null distribution for rigorous statistical evaluation of potential disease-related mutations. The workflow fetchs, parses, and analyzes data from the [1000 genomes Project](https://www.internationalgenome.org) (see ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/). It cross-matches the extracted data (which person has which mutations), with the mutation's sift score (how bad it is). Then it performs a few analyses, including plotting.
 
@@ -39,15 +39,30 @@ pip install -e .
 ```
 
 ## Run the Application
+
+```bash
+python run.py --data-dir . --results-dir data/results --executor process-pool --fraction 0.05 --ind-jobs 25 --workers 32
 ```
-./daxgen.py -D 20130502 -f data.csv -i 1
-```
-This workflow assumes that all input data listed in the `data.csv` file is available in the `data/20130502` folder by default (but you can change that behavior with the `-D`).
+This workflow assumes that all input data listed in the `data.csv` file is available in the `data/` folder inside of the current directory `.`.
+
+To run with ProxyStore futures, pass the `--proxystore` flag.
+
+The above example, once run with and without the `--proxystore` flag, will produce two output traces in `run-process-pool.csv` and `run-process-pool-proxystore.csv`.
 
 ### Workflow parallelism
-You can control how many `individuals` jobs **per chromosome** will get created with the parameter `-i IND_JOBS, --individuals-jobs IND_JOBS`, by default it's set to `1`. If the value provided is larger than the total number of rows in the data file for that chromosome, then it will be set to the number of rows so that each job will process one row (_Warning_: this will extremely inefficient and will create a large number of jobs, about `250,000`).
+
+You can control how many `individuals` jobs **per chromosome** will get created with the parameter `--ind-jobs IND_JOBS`.
+If the value provided is larger than the total number of rows in the data file for that chromosome, then it will be set to the number of rows so that each job will process one row (_Warning_: this will extremely inefficient and will create a large number of jobs, about `250,000`).
 
 In addition, it is required that `IND_JOBS` **divides the number of rows** for each chromosome, in this case `250,000`.
+
+### Compare Runs
+
+A GANTT chart comparing the baseline and ProxyStore runs can be created with the `plot.py` script.
+```bash
+python plot.py --baseline run-process-pool.csv --proxystore run-process-pool-proxystore.csv --output gantt.pdf
+```
+The output plot will be written to `gantt.pdf`.
 
 # References
 
